@@ -54,27 +54,71 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          image_url: string | null
           read_at: string | null
-          recipient_id: string
+          recipient_id: string | null
           sender_id: string
+          updated_at: string
         }
         Insert: {
           content: string
           created_at?: string
           id?: string
+          image_url?: string | null
           read_at?: string | null
-          recipient_id: string
+          recipient_id?: string | null
           sender_id: string
+          updated_at?: string
         }
         Update: {
           content?: string
           created_at?: string
           id?: string
+          image_url?: string | null
           read_at?: string | null
-          recipient_id?: string
+          recipient_id?: string | null
           sender_id?: string
+          updated_at?: string
         }
         Relationships: []
+      }
+      comments: {
+        Row: {
+          author_id: string
+          content: string
+          created_at: string
+          id: string
+          image_url: string | null
+          recipe_id: string
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          content: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          recipe_id: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          recipe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       deletion_requests: {
         Row: {
@@ -229,6 +273,8 @@ export type Database = {
           instructions: string | null
           is_draft: boolean
           parent_recipe_id: string | null
+          tags: string[]
+          time_required: string
           title: string
           updated_at: string
         }
@@ -244,6 +290,8 @@ export type Database = {
           instructions?: string | null
           is_draft?: boolean
           parent_recipe_id?: string | null
+          tags?: string[]
+          time_required?: string
           title: string
           updated_at?: string
         }
@@ -259,6 +307,8 @@ export type Database = {
           instructions?: string | null
           is_draft?: boolean
           parent_recipe_id?: string | null
+          tags?: string[]
+          time_required?: string
           title?: string
           updated_at?: string
         }
@@ -302,12 +352,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_recipe_tag: {
+        Args: { _recipe_id: string; _tag: string }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      is_superadmin_user: { Args: { _user_id: string }; Returns: boolean }
+      remove_recipe_tag: {
+        Args: { _recipe_id: string; _tag: string }
+        Returns: undefined
       }
     }
     Enums: {
