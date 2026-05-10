@@ -5,7 +5,6 @@ import {
   BookOpen,
   Star,
   MessageCircle,
-  Edit3,
   Crown,
   User as UserIcon,
   LogOut,
@@ -27,13 +26,12 @@ interface Item {
 
 export default function ImperialMenu() {
   const [expanded, setExpanded] = useState(false);
-  const { isAdmin, user } = useAuth();
+  const { isAdmin } = useAuth();
   const unread = useUnreadCount();
   const ref = useRef<HTMLElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
-  // collapse on outside click + on route change
   useEffect(() => setExpanded(false), [location.pathname]);
 
   useEffect(() => {
@@ -63,11 +61,8 @@ export default function ImperialMenu() {
 
   const visible = items.filter((i) => !i.adminOnly || isAdmin);
 
-  // Background area click toggles expansion
   const onNavClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      setExpanded((v) => !v);
-    }
+    if (e.target === e.currentTarget) setExpanded((v) => !v);
   };
 
   return (
@@ -76,10 +71,10 @@ export default function ImperialMenu() {
       onClick={onNavClick}
       aria-label="Hauptnavigation"
       className={cn(
-        "imperial-surface fixed z-50 shadow-[var(--shadow-imperial)] border-gold/30",
-        // Mobile: bottom bar
+        "fixed z-50 border-gold/40 shadow-[var(--shadow-imperial)]",
+        // black background per spec
+        "bg-black",
         "bottom-0 left-0 right-0 border-t",
-        // Desktop: left vertical
         "md:top-0 md:right-auto md:bottom-0 md:w-16 md:border-t-0 md:border-r",
         expanded && "md:w-44"
       )}
@@ -87,21 +82,13 @@ export default function ImperialMenu() {
       <div
         onClick={onNavClick}
         className={cn(
-          "flex md:flex-col items-center md:items-stretch gap-2 p-2 md:p-3 h-full",
+          "flex md:flex-col items-center md:items-stretch gap-1 md:gap-2 p-2 md:p-3 h-full",
           "justify-around md:justify-start"
         )}
       >
-        {/* Logo on desktop */}
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="hidden md:flex items-center justify-center pb-3 mb-1 border-b border-gold/20"
-        >
+        <div onClick={(e) => e.stopPropagation()} className="hidden md:flex items-center justify-center pb-3 mb-1 border-b border-gold/30">
           <Crown className="w-6 h-6 text-gold" />
-          {expanded && (
-            <span className="ml-2 imperial-heading text-sm text-gold whitespace-nowrap">
-              Imperial
-            </span>
-          )}
+          {expanded && <span className="ml-2 imperial-heading text-sm text-gold whitespace-nowrap">Imperial</span>}
         </div>
 
         {visible.map((it) => (
@@ -111,20 +98,13 @@ export default function ImperialMenu() {
         <div className="hidden md:block flex-1" onClick={onNavClick} />
 
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleLogout();
-          }}
-          className="group flex md:flex-row flex-col items-center justify-center gap-1 md:gap-3 p-2 rounded-md hover:bg-secondary/60 transition-colors"
+          onClick={(e) => { e.stopPropagation(); handleLogout(); }}
+          className="group flex md:flex-row flex-col items-center justify-center gap-1 md:gap-3 p-2 rounded-md hover:bg-white/10 transition-colors"
           title="Abmelden"
           aria-label="Abmelden"
         >
-          <LogOut className="w-6 h-6 md:w-6 md:h-6 text-surface-foreground group-hover:text-gold" />
-          {expanded && (
-            <span className="hidden md:inline text-xs text-surface-foreground/70 group-hover:text-gold whitespace-normal break-words leading-tight max-w-[100px]">
-              Abmelden
-            </span>
-          )}
+          <LogOut className="w-7 h-7 md:w-6 md:h-6 text-white" />
+          {expanded && <span className="hidden md:inline text-xs text-white whitespace-normal break-words leading-tight max-w-[100px]">Abmelden</span>}
         </button>
       </div>
     </nav>
@@ -141,20 +121,15 @@ function MenuItem({ item, expanded }: { item: Item; expanded: boolean }) {
       className={({ isActive }) =>
         cn(
           "group relative flex md:flex-row flex-col items-center justify-center md:justify-start gap-1 md:gap-3 p-2 md:px-2 md:py-2 rounded-md transition-colors",
-          "hover:bg-secondary/60",
-          isActive && "bg-secondary/80"
+          // default: white on black; active: black on imperial yellow
+          isActive ? "bg-[#FFFF00]" : "hover:bg-white/10"
         )
       }
     >
       {({ isActive }) => (
         <>
           <div className="relative">
-            <Icon
-              className={cn(
-                "w-8 h-8 md:w-6 md:h-6 transition-colors",
-                isActive ? "text-gold" : "text-surface-foreground group-hover:text-gold"
-              )}
-            />
+            <Icon className={cn("w-8 h-8 md:w-6 md:h-6 transition-colors", isActive ? "text-black" : "text-white")} />
             {item.badge && item.badge > 0 ? (
               <span className="absolute -top-1.5 -right-2 flex items-center gap-0.5 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full px-1.5 min-w-[18px] h-[18px] justify-center">
                 <Star className="w-2.5 h-2.5 fill-current" />
@@ -163,12 +138,7 @@ function MenuItem({ item, expanded }: { item: Item; expanded: boolean }) {
             ) : null}
           </div>
           {expanded && (
-            <span
-              className={cn(
-                "hidden md:inline text-xs whitespace-normal break-words leading-[1.2] max-w-[100px]",
-                isActive ? "text-gold" : "text-surface-foreground/70 group-hover:text-gold"
-              )}
-            >
+            <span className={cn("hidden md:inline text-xs whitespace-normal break-words leading-[1.2] max-w-[100px] font-medium", isActive ? "text-black" : "text-white")}>
               {item.label}
             </span>
           )}
