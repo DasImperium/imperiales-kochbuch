@@ -31,8 +31,8 @@ export default function Comments({ recipeId }: { recipeId: string }) {
     const { data: profs } = ids.length
       ? await supabase.from("profiles").select("id,display_name").in("id", ids)
       : { data: [] as any };
-    const map = new Map((profs ?? []).map((p: any) => [p.id, p.display_name]));
-    setItems((data ?? []).map((c) => ({ ...c, author_name: map.get(c.author_id) || "Unbekannt" })));
+    const map = new Map<string, string>((profs ?? []).map((p: any) => [p.id, p.display_name as string]));
+    setItems((data ?? []).map((c: any) => ({ ...c, author_name: map.get(c.author_id) || "Unbekannt" })));
   };
 
   useEffect(() => {
