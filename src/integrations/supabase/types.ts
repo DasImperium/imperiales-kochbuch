@@ -207,6 +207,106 @@ export type Database = {
           },
         ]
       }
+      menu_items: {
+        Row: {
+          created_at: string
+          default_servings: number
+          id: string
+          menu_id: string
+          position: number
+          recipe_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_servings?: number
+          id?: string
+          menu_id: string
+          position?: number
+          recipe_id: string
+        }
+        Update: {
+          created_at?: string
+          default_servings?: number
+          id?: string
+          menu_id?: string
+          position?: number
+          recipe_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_items_menu_id_fkey"
+            columns: ["menu_id"]
+            isOneToOne: false
+            referencedRelation: "menus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_scalings: {
+        Row: {
+          created_at: string
+          id: string
+          menu_id: string
+          name: string
+          servings_map: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          menu_id: string
+          name: string
+          servings_map?: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          menu_id?: string
+          name?: string
+          servings_map?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_scalings_menu_id_fkey"
+            columns: ["menu_id"]
+            isOneToOne: false
+            referencedRelation: "menus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menus: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_id: string
+          tags: string[]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          owner_id: string
+          tags?: string[]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          tags?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -273,6 +373,8 @@ export type Database = {
           instructions: string | null
           is_draft: boolean
           parent_recipe_id: string | null
+          servings: number
+          servings_unit: string
           tags: string[]
           time_required: string
           title: string
@@ -290,6 +392,8 @@ export type Database = {
           instructions?: string | null
           is_draft?: boolean
           parent_recipe_id?: string | null
+          servings?: number
+          servings_unit?: string
           tags?: string[]
           time_required?: string
           title: string
@@ -307,6 +411,8 @@ export type Database = {
           instructions?: string | null
           is_draft?: boolean
           parent_recipe_id?: string | null
+          servings?: number
+          servings_unit?: string
           tags?: string[]
           time_required?: string
           title?: string

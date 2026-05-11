@@ -4,18 +4,20 @@ import { supabase } from "@/integrations/supabase/client";
 import heroImg from "@/assets/imperial-hero.jpg";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Star, Crown } from "lucide-react";
+import { BookOpen, Star, MessageSquare, Crown } from "lucide-react";
 
 export default function Home() {
-  const [stats, setStats] = useState({ recipes: 0, categories: 0 });
+  const [stats, setStats] = useState({ recipes: 0, categories: 0, reactions: 0 });
 
   useEffect(() => {
     (async () => {
-      const [{ count: r }, { count: c }] = await Promise.all([
+      const [{ count: r }, { count: c }, { count: ra }, { count: co }] = await Promise.all([
         supabase.from("recipes").select("*", { count: "exact", head: true }),
         supabase.from("categories").select("*", { count: "exact", head: true }),
+        supabase.from("ratings").select("*", { count: "exact", head: true }),
+        supabase.from("comments").select("*", { count: "exact", head: true }),
       ]);
-      setStats({ recipes: r ?? 0, categories: c ?? 0 });
+      setStats({ recipes: r ?? 0, categories: c ?? 0, reactions: (ra ?? 0) + (co ?? 0) });
     })();
   }, []);
 
@@ -26,20 +28,14 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-transparent" />
         <div className="relative text-center px-4 max-w-3xl">
           <Crown className="w-12 h-12 text-gold mx-auto mb-3" />
-          <h1 className="imperial-heading text-4xl md:text-6xl text-gold mb-4">
-            Imperiales Kochbuch
-          </h1>
+          <h1 className="imperial-heading text-4xl md:text-6xl text-gold mb-4">Imperiales Kochbuch</h1>
           <div className="gold-divider w-48 mx-auto mb-4" />
           <p className="text-lg text-foreground/80 mb-6">
-            Sammle, teile und verwalte königliche Rezepte würdig eines Imperiums.
+            Sammle, teile und verwalte herausragende Rezepte würdig eines Imperiums.
           </p>
           <div className="flex gap-3 justify-center flex-wrap">
-            <Button asChild className="bg-gold text-gold-foreground hover:bg-gold-soft">
-              <Link to="/recipes">Rezepte entdecken</Link>
-            </Button>
-            <Button asChild variant="outline" className="border-gold/50 hover:border-gold">
-              <Link to="/recipes/new">Rezept anlegen</Link>
-            </Button>
+            <Button asChild variant="gold"><Link to="/recipes">Rezepte entdecken</Link></Button>
+            <Button asChild><Link to="/recipes/new">Rezept anlegen</Link></Button>
           </div>
         </div>
       </section>
@@ -56,9 +52,9 @@ export default function Home() {
           <div className="text-sm text-surface-foreground/70">Kategorien</div>
         </Card>
         <Card className="imperial-surface border-gold/30 p-6">
-          <Crown className="w-8 h-8 text-gold mb-3" />
-          <div className="text-lg imperial-heading text-gold">Königlich</div>
-          <div className="text-sm text-surface-foreground/70">Bewerte & teile mit der Gemeinschaft</div>
+          <MessageSquare className="w-8 h-8 text-gold mb-3" />
+          <div className="text-3xl imperial-heading text-gold">{stats.reactions}</div>
+          <div className="text-sm text-surface-foreground/70">Reaktionen & Kommentare</div>
         </Card>
       </section>
     </div>

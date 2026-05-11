@@ -17,6 +17,8 @@ import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import Search from "./pages/Search";
 import MyRecipes from "./pages/MyRecipes";
+import Menus from "./pages/Menus";
+import MenuDetail from "./pages/MenuDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +48,8 @@ const App = () => (
           <Route path="/admin" element={<Protected><Admin /></Protected>} />
           <Route path="/search" element={<Protected><Search /></Protected>} />
           <Route path="/my-recipes" element={<Protected><MyRecipes /></Protected>} />
+          <Route path="/menus" element={<Protected><Menus /></Protected>} />
+          <Route path="/menus/:id" element={<Protected><MenuDetail /></Protected>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

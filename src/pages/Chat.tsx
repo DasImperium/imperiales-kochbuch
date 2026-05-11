@@ -118,17 +118,17 @@ export default function Chat() {
       </div>
 
       {composing && (
-        <Card className="imperial-surface border-gold/30 p-4 mb-4 space-y-3">
-          <h3 className="imperial-heading text-gold">Empfänger wählen</h3>
+        <Card className="bg-white text-black border-gold/30 p-4 mb-4 space-y-3">
+          <h3 className="imperial-heading text-[#006400]">Empfänger wählen</h3>
           {isAdmin && (
-            <label className="flex items-center gap-2 text-sm text-surface-foreground">
+            <label className="flex items-center gap-2 text-sm text-black">
               <Checkbox checked={broadcast} onCheckedChange={(v) => setBroadcast(!!v)} /> <Megaphone className="w-4 h-4" /> An alle Nutzer (Admin-Broadcast)
             </label>
           )}
           {!broadcast && (
             <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-1 max-h-48 overflow-y-auto">
               {contacts.map((c) => (
-                <label key={c.id} className="flex items-center gap-2 text-sm text-surface-foreground bg-background/40 rounded px-2 py-1">
+                <label key={c.id} className="flex items-center gap-2 text-sm text-black bg-gray-100 rounded px-2 py-1">
                   <Checkbox checked={selected.has(c.id)} onCheckedChange={(v) => {
                     const s = new Set(selected); v ? s.add(c.id) : s.delete(c.id); setSelected(s);
                   }} />
@@ -137,9 +137,9 @@ export default function Chat() {
               ))}
             </div>
           )}
-          <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Nachricht…" className="bg-background/60" maxLength={2000} />
+          <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Nachricht…" className="bg-white text-black" maxLength={2000} />
           <ImageUploader bucket="chat-images" value={image} onChange={setImage} label="Bild anhängen" />
-          <Button onClick={sendToSelected} className="bg-gold text-gold-foreground hover:bg-gold-soft">
+          <Button onClick={sendToSelected} variant="gold">
             <Send className="w-4 h-4 mr-1" /> Senden
           </Button>
         </Card>
@@ -161,12 +161,12 @@ export default function Chat() {
           ))}
         </Card>
 
-        <Card className="imperial-surface border-gold/30 flex flex-col">
+        <Card className="bg-white border-gold/30 flex flex-col">
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
-            {!active && <p className="text-surface-foreground/60">Wähle einen Kontakt</p>}
+            {!active && <p className="text-black/60">Wähle einen Kontakt</p>}
             {messages.map((m) => (
               <div key={m.id} className={`flex ${m.sender_id === user?.id ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[75%] px-3 py-2 rounded-lg whitespace-pre-wrap text-sm ${m.sender_id === user?.id ? "bg-gold text-gold-foreground" : "bg-secondary text-secondary-foreground"}`}>
+                <div className={`max-w-[75%] px-3 py-2 rounded-lg whitespace-pre-wrap text-sm ${m.sender_id === user?.id ? "bg-[#FFD700] text-black" : "bg-gray-100 text-black border border-gray-300"}`}>
                   {m.content}
                   {m.image_url && <img src={m.image_url} alt="" className="mt-2 max-h-48 rounded" />}
                 </div>
@@ -175,11 +175,11 @@ export default function Chat() {
             <div ref={endRef} />
           </div>
           {active && (active !== "broadcast" || isAdmin) && (
-            <div className="p-3 border-t border-gold/20 space-y-2">
+            <div className="p-3 border-t border-gold/20 space-y-2 bg-white">
               <ImageUploader bucket="chat-images" value={image} onChange={setImage} label="Bild" />
               <div className="flex gap-2">
-                <Input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Nachricht…" className="bg-background/60" maxLength={2000} />
-                <Button onClick={send} className="bg-gold text-gold-foreground hover:bg-gold-soft"><Send className="w-4 h-4" /></Button>
+                <Input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Nachricht…" className="bg-white text-black" maxLength={2000} />
+                <Button onClick={send} variant="gold"><Send className="w-4 h-4" /></Button>
               </div>
             </div>
           )}
