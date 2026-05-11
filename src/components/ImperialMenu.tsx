@@ -9,6 +9,7 @@ import {
   User as UserIcon,
   LogOut,
   Search,
+  Utensils,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
@@ -52,6 +53,7 @@ export default function ImperialMenu() {
   const items: Item[] = [
     { to: "/", icon: Home, label: "Start" },
     { to: "/recipes", icon: BookOpen, label: "Rezepte" },
+    { to: "/menus", icon: Utensils, label: "Menüs" },
     { to: "/favorites", icon: Star, label: "Favoriten" },
     { to: "/search", icon: Search, label: "Suche" },
     { to: "/chat", icon: MessageCircle, label: "Chats", badge: unread },
