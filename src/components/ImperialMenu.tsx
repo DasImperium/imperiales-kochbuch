@@ -1,15 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
-  Home,
-  BookOpen,
-  Star,
-  MessageCircle,
-  Crown,
-  User as UserIcon,
-  LogOut,
-  Search,
-  Utensils,
+  Home, BookOpen, Star, MessageCircle, Crown, User as UserIcon, LogOut,
+  Search, Utensils, Package, ShoppingCart,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
@@ -18,11 +11,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface Item {
-  to: string;
-  icon: React.ElementType;
-  label: string;
-  badge?: number;
-  adminOnly?: boolean;
+  to: string; icon: React.ElementType; label: string; badge?: number; adminOnly?: boolean;
 }
 
 export default function ImperialMenu() {
@@ -50,11 +39,14 @@ export default function ImperialMenu() {
     navigate("/auth");
   };
 
+  // Reihenfolge: Rezeptsammlung → Menüs → Lieblingsrezepte (per Spec)
   const items: Item[] = [
     { to: "/", icon: Home, label: "Start" },
     { to: "/recipes", icon: BookOpen, label: "Rezepte" },
     { to: "/menus", icon: Utensils, label: "Menüs" },
     { to: "/favorites", icon: Star, label: "Favoriten" },
+    { to: "/inventory", icon: Package, label: "Inventar" },
+    { to: "/shopping", icon: ShoppingCart, label: "Einkauf" },
     { to: "/search", icon: Search, label: "Suche" },
     { to: "/chat", icon: MessageCircle, label: "Chats", badge: unread },
     { to: "/profile", icon: UserIcon, label: "Profil" },
@@ -63,29 +55,29 @@ export default function ImperialMenu() {
 
   const visible = items.filter((i) => !i.adminOnly || isAdmin);
 
-  const onNavClick = (e: React.MouseEvent) => {
+  // Klick auf leeren Bereich: Toggle Beschriftung
+  const onEmptyClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) setExpanded((v) => !v);
   };
 
   return (
     <nav
       ref={ref}
-      onClick={onNavClick}
+      onClick={onEmptyClick}
       aria-label="Hauptnavigation"
       className={cn(
-        "fixed z-50 border-gold/40 shadow-[var(--shadow-imperial)]",
-        // black background per spec
-        "bg-black",
-        "bottom-0 left-0 right-0 border-t",
-        "md:top-0 md:right-auto md:bottom-0 md:w-16 md:border-t-0 md:border-r",
+        "fixed z-50 border-gold/40 shadow-[var(--shadow-imperial)] bg-black overflow-y-auto",
+        // Mobile: unten | Desktop: links
+        "bottom-0 left-0 right-0 border-t max-h-[40vh]",
+        "md:top-0 md:right-auto md:bottom-0 md:w-16 md:max-h-screen md:border-t-0 md:border-r",
         expanded && "md:w-44"
       )}
     >
       <div
-        onClick={onNavClick}
+        onClick={onEmptyClick}
         className={cn(
-          "flex md:flex-col items-center md:items-stretch gap-1 md:gap-2 p-2 md:p-3 h-full",
-          "justify-around md:justify-start"
+          "flex md:flex-col items-center md:items-stretch gap-1 md:gap-2 p-2 md:p-3 min-h-full",
+          "flex-wrap md:flex-nowrap justify-around md:justify-start"
         )}
       >
         <div onClick={(e) => e.stopPropagation()} className="hidden md:flex items-center justify-center pb-3 mb-1 border-b border-gold/30">
@@ -97,7 +89,7 @@ export default function ImperialMenu() {
           <MenuItem key={it.to} item={it} expanded={expanded} />
         ))}
 
-        <div className="hidden md:block flex-1" onClick={onNavClick} />
+        <div className="hidden md:block flex-1" onClick={onEmptyClick} />
 
         <button
           onClick={(e) => { e.stopPropagation(); handleLogout(); }}
@@ -123,7 +115,6 @@ function MenuItem({ item, expanded }: { item: Item; expanded: boolean }) {
       className={({ isActive }) =>
         cn(
           "group relative flex md:flex-row flex-col items-center justify-center md:justify-start gap-1 md:gap-3 p-2 md:px-2 md:py-2 rounded-md transition-colors",
-          // default: white on black; active: black on imperial yellow
           isActive ? "bg-[#FFFF00]" : "hover:bg-white/10"
         )
       }
@@ -131,7 +122,7 @@ function MenuItem({ item, expanded }: { item: Item; expanded: boolean }) {
       {({ isActive }) => (
         <>
           <div className="relative">
-            <Icon className={cn("w-8 h-8 md:w-6 md:h-6 transition-colors", isActive ? "text-black" : "text-white")} />
+            <Icon className={cn("w-7 h-7 md:w-6 md:h-6 transition-colors", isActive ? "text-black" : "text-white")} />
             {item.badge && item.badge > 0 ? (
               <span className="absolute -top-1.5 -right-2 flex items-center gap-0.5 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full px-1.5 min-w-[18px] h-[18px] justify-center">
                 <Star className="w-2.5 h-2.5 fill-current" />

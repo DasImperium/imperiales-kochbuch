@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Star, Heart, FileDown, Edit3, Trash2, Copy, Plus, Clock, Users } from "lucide-react";
+import { Star, Heart, FileDown, Edit3, Trash2, Copy, Plus, Clock, Users, Lock, ShoppingCart, ChefHat } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import Comments from "@/components/Comments";
@@ -15,6 +15,13 @@ import { formatTime } from "@/lib/timeFormat";
 import { scaleIngredientsText } from "@/lib/scaling";
 import ServingsControl from "@/components/ServingsControl";
 import { CategoryRow, formatCategoryPath } from "@/lib/categories";
+import { softDeleteRecipe, setProtection, TIER_COLOR, TIER_LABEL } from "@/lib/recipeAdmin";
+import { parseIngredients } from "@/lib/ingredients";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const titleSchema = z.string().trim().min(2).max(140);
 
@@ -22,13 +29,15 @@ interface Recipe {
   id: string; title: string; description: string | null; ingredients: string | null;
   instructions: string | null; image_url: string | null; category_id: string | null;
   author_id: string; created_at: string; time_required: string; tags: string[];
-  servings: number; servings_unit: string;
+  servings: number; servings_unit: string; protection_tier?: number; deleted_at?: string | null;
 }
 
 export default function RecipeDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isSuperadmin, isImperator, tier } = useAuth();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmCooked, setConfirmCooked] = useState(false);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [author, setAuthor] = useState<string>("");
   const [categories, setCategories] = useState<CategoryRow[]>([]);
@@ -112,11 +121,51 @@ export default function RecipeDetail() {
     toast.success("Löschantrag gesendet"); setReason("");
   };
 
-  const adminDelete = async () => {
-    if (!recipe) return;
-    if (!confirm("Rezept endgültig löschen?")) return;
-    await supabase.from("recipes").delete().eq("id", recipe.id);
-    toast.success("Gelöscht"); navigate("/recipes");
+  const doDelete = async () => {
+    if (!recipe || !user) return;
+    if ((recipe.protection_tier ?? 0) > tier) { toast.error("Geschütztes Rezept – höhere Stufe nötig"); return; }
+    const ok = await softDeleteRecipe(recipe.id, user.id, tier);
+    if (ok) { toast.success("Gelöscht"); navigate("/recipes"); }
+  };
+
+  const addToShopping = async () => {
+    if (!user || !recipe) return;
+    const items = parseIngredients(recipe.ingredients, factor);
+    if (items.length === 0) { toast.error("Keine Zutaten erkannt"); return; }
+    const rows = items.filter((it) => it.amount > 0 || it.name).map((it) => ({
+      owner_id: user.id, name: it.name, amount: it.amount, unit: it.unit,
+    }));
+    const { error } = await supabase.from("shopping_items").insert(rows);
+    if (error) toast.error(error.message); else toast.success(`${rows.length} Artikel zur Einkaufsliste hinzugefügt`);
+  };
+
+  const addMissingToShopping = async () => {
+    if (!user || !recipe) return;
+    const need = parseIngredients(recipe.ingredients, factor);
+    const { data: inv } = await supabase.from("inventory_items").select("*").eq("owner_id", user.id);
+    const rows: any[] = [];
+    for (const it of need) {
+      const have = (inv ?? []).find((x: any) => x.name.toLowerCase() === it.name.toLowerCase() && (x.unit ?? "").toLowerCase() === (it.unit ?? "").toLowerCase());
+      const diff = it.amount - Number(have?.amount ?? 0);
+      if (diff > 0) rows.push({ owner_id: user.id, name: it.name, amount: diff, unit: it.unit });
+    }
+    if (rows.length === 0) { toast.success("Alles vorhanden – nichts ergänzt"); return; }
+    const { error } = await supabase.from("shopping_items").insert(rows);
+    if (error) toast.error(error.message); else toast.success(`${rows.length} fehlende Artikel ergänzt`);
+  };
+
+  const subtractFromInventory = async () => {
+    if (!user || !recipe) return;
+    const need = parseIngredients(recipe.ingredients, factor);
+    const { data: inv } = await supabase.from("inventory_items").select("*").eq("owner_id", user.id);
+    for (const it of need) {
+      const existing = (inv ?? []).find((x: any) => x.name.toLowerCase() === it.name.toLowerCase() && (x.unit ?? "").toLowerCase() === (it.unit ?? "").toLowerCase());
+      if (existing) {
+        const newAmt = Math.max(0, Number(existing.amount) - it.amount);
+        await supabase.from("inventory_items").update({ amount: newAmt }).eq("id", existing.id);
+      }
+    }
+    toast.success("Mengen vom Inventar abgezogen"); setConfirmCooked(false);
   };
 
   const addTag = async () => {
@@ -163,7 +212,14 @@ ${recipe.description ? `<p>${esc(recipe.description)}</p>` : ""}
       <article className="recipe-card overflow-hidden">
         {recipe.image_url && <img src={recipe.image_url} alt={recipe.title} className="w-full h-64 object-cover" />}
         <div className="p-6">
-          <h1 className="imperial-heading text-3xl mb-1 text-content-fg">{recipe.title}</h1>
+          <h1 className="imperial-heading text-3xl mb-1 text-content-fg break-words whitespace-normal flex items-center gap-2 flex-wrap">
+            {(recipe.protection_tier ?? 0) > 0 && isAdmin && (
+              <span title={`${TIER_LABEL[recipe.protection_tier!]}-Schutz`} style={{ color: TIER_COLOR[recipe.protection_tier!] }}>
+                <Lock className="w-6 h-6" />
+              </span>
+            )}
+            <span className="break-words">{recipe.title}</span>
+          </h1>
 
           <div className="flex items-center gap-3 mb-3 flex-wrap">
             <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded bg-black text-[#FFD700]">
@@ -223,14 +279,39 @@ ${recipe.description ? `<p>${esc(recipe.description)}</p>` : ""}
                 <Link to={`/recipes/${recipe.id}/edit`}><Edit3 className="w-4 h-4 mr-1" /> Bearbeiten</Link>
               </Button>
             )}
-            {isAdmin && (
-              <Button onClick={adminDelete} variant="destructive" size="sm">
+            {(canEdit || isAdmin) && (
+              <Button onClick={() => setConfirmDelete(true)} variant="destructive" size="sm">
                 <Trash2 className="w-4 h-4 mr-1" /> Löschen
               </Button>
             )}
+            <Button onClick={addToShopping} variant="default" size="sm">
+              <ShoppingCart className="w-4 h-4 mr-1" />Zur Einkaufsliste
+            </Button>
+            <Button onClick={addMissingToShopping} variant="default" size="sm">
+              <Plus className="w-4 h-4 mr-1" />Fehlendes ergänzen
+            </Button>
+            <Button onClick={() => setConfirmCooked(true)} variant="gold" size="sm">
+              <ChefHat className="w-4 h-4 mr-1" />Gekocht
+            </Button>
+            {/* Schutz setzen (nur Admin+) */}
+            {isAdmin && (
+              <Select value={String(recipe.protection_tier ?? 0)} onValueChange={async (v) => {
+                const t = parseInt(v, 10);
+                if (t > tier) { toast.error("Höhere Stufe als deine"); return; }
+                const ok = await setProtection(recipe.id, t); if (ok) { toast.success("Schutz gesetzt"); load(); }
+              }}>
+                <SelectTrigger className="w-[180px] bg-white text-black h-9"><SelectValue placeholder="Schutz" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Kein Schutz</SelectItem>
+                  <SelectItem value="2" disabled={tier < 2}>Admin-Schutz (rot)</SelectItem>
+                  <SelectItem value="3" disabled={tier < 3}>Superadmin-Schutz (blau)</SelectItem>
+                  <SelectItem value="4" disabled={tier < 4}>Imperator-Schutz (grün)</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
-          {recipe.description && <p className="mb-4 text-content-fg/80 leading-relaxed">{recipe.description}</p>}
+          {recipe.description && <p className="mb-4 text-content-fg/80 leading-relaxed break-words">{recipe.description}</p>}
 
           <h2 className="imperial-heading text-xl text-[#006400] mt-6 mb-2">Zutaten</h2>
           <div className="gold-divider mb-3" />
@@ -260,6 +341,41 @@ ${recipe.description ? `<p>${esc(recipe.description)}</p>` : ""}
           <Comments recipeId={recipe.id} />
         </div>
       </article>
+
+      {/* Lösch-Bestätigung */}
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Wollen Sie „{recipe.title}" wirklich löschen?</AlertDialogTitle>
+            <AlertDialogDescription>Wird ausgeblendet, im Admin-Bereich wiederherstellbar.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Nein</AlertDialogCancel>
+            <AlertDialogAction className="bg-[#C0392B] text-white hover:bg-[#A93226]" onClick={doDelete}>Ja, löschen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Gekocht-Bestätigung */}
+      <AlertDialog open={confirmCooked} onOpenChange={setConfirmCooked}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{recipe.title} – als gekocht markieren?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Für {servings} {recipe.servings_unit} werden folgende Mengen vom Inventar abgezogen:
+              <ul className="mt-2 max-h-48 overflow-y-auto text-xs space-y-0.5">
+                {parseIngredients(recipe.ingredients, factor).slice(0, 30).map((it, i) => (
+                  <li key={i}>• {it.amount > 0 ? `${it.amount.toFixed(1)} ${it.unit} ` : ""}{it.name}</li>
+                ))}
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Nein</AlertDialogCancel>
+            <AlertDialogAction className="bg-[#FFD700] text-black hover:bg-[#FFC700]" onClick={subtractFromInventory}>Ja, abziehen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -19,6 +19,8 @@ import Search from "./pages/Search";
 import MyRecipes from "./pages/MyRecipes";
 import Menus from "./pages/Menus";
 import MenuDetail from "./pages/MenuDetail";
+import Inventory from "./pages/Inventory";
+import ShoppingList from "./pages/ShoppingList";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +52,8 @@ const App = () => (
           <Route path="/my-recipes" element={<Protected><MyRecipes /></Protected>} />
           <Route path="/menus" element={<Protected><Menus /></Protected>} />
           <Route path="/menus/:id" element={<Protected><MenuDetail /></Protected>} />
+          <Route path="/inventory" element={<Protected><Inventory /></Protected>} />
+          <Route path="/shopping" element={<Protected><ShoppingList /></Protected>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
