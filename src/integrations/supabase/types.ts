@@ -207,6 +207,84 @@ export type Database = {
           },
         ]
       }
+      inventory_items: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      list_shares: {
+        Row: {
+          created_at: string
+          id: string
+          list_kind: string
+          owner_id: string
+          shared_with: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          list_kind: string
+          owner_id: string
+          shared_with: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          list_kind?: string
+          owner_id?: string
+          shared_with?: string
+        }
+        Relationships: []
+      }
+      list_snapshots: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          list_kind: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          id?: string
+          list_kind: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          list_kind?: string
+          owner_id?: string
+        }
+        Relationships: []
+      }
       menu_items: {
         Row: {
           created_at: string
@@ -365,6 +443,9 @@ export type Database = {
           author_id: string
           category_id: string | null
           created_at: string
+          deleted_at: string | null
+          deleted_by_tier: number | null
+          deleted_by_user: string | null
           description: string | null
           forced_visible: boolean
           id: string
@@ -373,6 +454,7 @@ export type Database = {
           instructions: string | null
           is_draft: boolean
           parent_recipe_id: string | null
+          protection_tier: number
           servings: number
           servings_unit: string
           tags: string[]
@@ -384,6 +466,9 @@ export type Database = {
           author_id: string
           category_id?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_tier?: number | null
+          deleted_by_user?: string | null
           description?: string | null
           forced_visible?: boolean
           id?: string
@@ -392,6 +477,7 @@ export type Database = {
           instructions?: string | null
           is_draft?: boolean
           parent_recipe_id?: string | null
+          protection_tier?: number
           servings?: number
           servings_unit?: string
           tags?: string[]
@@ -403,6 +489,9 @@ export type Database = {
           author_id?: string
           category_id?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_tier?: number | null
+          deleted_by_user?: string | null
           description?: string | null
           forced_visible?: boolean
           id?: string
@@ -411,6 +500,7 @@ export type Database = {
           instructions?: string | null
           is_draft?: boolean
           parent_recipe_id?: string | null
+          protection_tier?: number
           servings?: number
           servings_unit?: string
           tags?: string[]
@@ -434,6 +524,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      shopping_items: {
+        Row: {
+          amount: number
+          checked: boolean
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          checked?: boolean
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          checked?: boolean
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
@@ -462,6 +585,10 @@ export type Database = {
         Args: { _recipe_id: string; _tag: string }
         Returns: undefined
       }
+      has_list_access: {
+        Args: { _kind: string; _owner_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -474,9 +601,10 @@ export type Database = {
         Args: { _recipe_id: string; _tag: string }
         Returns: undefined
       }
+      role_tier: { Args: { _user_id: string }; Returns: number }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "superadmin" | "imperator"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -604,7 +732,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "superadmin", "imperator"],
     },
   },
 } as const
