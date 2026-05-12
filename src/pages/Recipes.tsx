@@ -40,7 +40,7 @@ export default function Recipes() {
 
   const load = async () => {
     const [{ data: rs }, { data: cs }, { data: hs }, { data: rats }] = await Promise.all([
-      supabase.from("recipes").select("*").eq("is_draft", false).order("created_at", { ascending: false }),
+      supabase.from("recipes").select("*").eq("is_draft", false).is("deleted_at", null).order("created_at", { ascending: false }),
       supabase.from("categories").select("*").order("is_root", { ascending: false }).order("name"),
       user ? supabase.from("hidden_recipes").select("recipe_id").eq("user_id", user.id) : Promise.resolve({ data: [] as any }),
       supabase.from("ratings").select("recipe_id,user_id,stars"),
