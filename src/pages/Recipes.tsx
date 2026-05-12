@@ -201,29 +201,33 @@ export default function Recipes() {
                       <Star className="w-10 h-10 text-gold/40" />
                     </div>
                   )}
-                  {/* Eigene Bewertung links oben (grün) */}
                   <span className="absolute top-2 left-2 inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded bg-white text-[#006400] shadow">
                     <Star className="w-3 h-3 fill-[#006400]" /> {rt.mine > 0 ? rt.mine : "–"}
                   </span>
-                  {/* Gesamt-Bewertung rechts oben (gold) */}
                   <span className="absolute top-2 right-2 inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded bg-black text-[#FFD700] shadow">
                     <Star className="w-3 h-3 fill-[#FFD700]" /> {rt.avg > 0 ? rt.avg.toFixed(1) : "–"}
                   </span>
-                  {/* Zeit links unten */}
                   <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded bg-white text-[#006400] shadow">
                     <Clock className="w-3 h-3" /> {formatTime(r.time_required)}
                   </span>
-                  {/* Portionen rechts unten */}
                   <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded bg-white text-[#006400] shadow">
                     <Users className="w-3 h-3" /> {r.servings} {r.servings_unit?.slice(0, 4) ?? ""}
                   </span>
+                  {/* Schutz-Schloss (nur für Admin+) */}
+                  {isAdmin && (r.protection_tier ?? 0) > 0 && (
+                    <span title={`Geschützt (Stufe ${r.protection_tier})`}
+                      className="absolute top-2 left-1/2 -translate-x-1/2 inline-flex items-center justify-center w-7 h-7 rounded-full bg-white shadow"
+                      style={{ color: TIER_COLOR[r.protection_tier!] }}>
+                      <Lock className="w-4 h-4" />
+                    </span>
+                  )}
                 </Link>
                 <div className="p-4 flex-1 flex flex-col">
-                  <Link to={`/recipes/${r.id}`} className="imperial-heading text-lg text-content-fg hover:text-[#006400] transition-colors">{r.title}</Link>
+                  <Link to={`/recipes/${r.id}`} className="imperial-heading text-lg text-content-fg hover:text-[#006400] transition-colors break-words whitespace-normal">{r.title}</Link>
                   {path && (
-                    <span className="self-start text-xs mt-1 mb-1 px-2 py-0.5 rounded bg-white text-[#006400] font-bold border border-[#006400]/30">{path}</span>
+                    <span className="self-start text-xs mt-1 mb-1 px-2 py-0.5 rounded bg-white text-[#006400] font-bold border border-[#006400]/30 break-words">{path}</span>
                   )}
-                  <span className="text-xs text-content-fg/70 mb-2">von <strong className="text-content-fg">{author}</strong></span>
+                  <span className="text-xs text-content-fg/70 mb-2 break-words">von <strong className="text-content-fg">{author}</strong></span>
                   {(r.tags ?? []).length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                       {(r.tags ?? []).slice(0, 4).map((t) => (
@@ -231,16 +235,46 @@ export default function Recipes() {
                       ))}
                     </div>
                   )}
-                  <p className="text-sm text-content-fg/70 line-clamp-2 flex-1">{r.description}</p>
-                  <Button variant="outline" size="sm" onClick={() => toggleHide(r.id)} className="self-end mt-2 text-xs">
-                    {hidden.has(r.id) ? <><Eye className="w-3 h-3 mr-1" />Einblenden</> : <><EyeOff className="w-3 h-3 mr-1" />Ausblenden</>}
-                  </Button>
+                  <p className="text-sm text-content-fg/70 line-clamp-2 flex-1 break-words">{r.description}</p>
+                  <div className="flex items-center justify-between gap-2 mt-2">
+                    {(r.author_id === user?.id || isAdmin) && (
+                      <Button variant="destructive" size="sm" onClick={() => setToDelete(r)} className="text-xs">
+                        <Trash2 className="w-3 h-3 mr-1" />Löschen
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => toggleHide(r.id)} className="text-xs ml-auto">
+                      {hidden.has(r.id) ? <><Eye className="w-3 h-3 mr-1" />Einblenden</> : <><EyeOff className="w-3 h-3 mr-1" />Ausblenden</>}
+                    </Button>
+                  </div>
                 </div>
               </article>
             );
           })}
         </div>
       )}
+
+      <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Wollen Sie „{toDelete?.title}" wirklich löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Das Rezept wird ausgeblendet und bleibt im Admin-Bereich wiederherstellbar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Nein</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[#C0392B] text-white hover:bg-[#A93226]"
+              onClick={async () => {
+                if (!toDelete || !user) return;
+                if ((toDelete.protection_tier ?? 0) > tier) { toast.error("Geschütztes Rezept – höhere Stufe nötig"); setToDelete(null); return; }
+                const ok = await softDeleteRecipe(toDelete.id, user.id, tier);
+                if (ok) { toast.success("Gelöscht"); setToDelete(null); load(); }
+              }}
+            >Ja, löschen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
