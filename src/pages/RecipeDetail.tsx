@@ -121,11 +121,51 @@ export default function RecipeDetail() {
     toast.success("Löschantrag gesendet"); setReason("");
   };
 
-  const adminDelete = async () => {
-    if (!recipe) return;
-    if (!confirm("Rezept endgültig löschen?")) return;
-    await supabase.from("recipes").delete().eq("id", recipe.id);
-    toast.success("Gelöscht"); navigate("/recipes");
+  const doDelete = async () => {
+    if (!recipe || !user) return;
+    if ((recipe.protection_tier ?? 0) > tier) { toast.error("Geschütztes Rezept – höhere Stufe nötig"); return; }
+    const ok = await softDeleteRecipe(recipe.id, user.id, tier);
+    if (ok) { toast.success("Gelöscht"); navigate("/recipes"); }
+  };
+
+  const addToShopping = async () => {
+    if (!user || !recipe) return;
+    const items = parseIngredients(recipe.ingredients, factor);
+    if (items.length === 0) { toast.error("Keine Zutaten erkannt"); return; }
+    const rows = items.filter((it) => it.amount > 0 || it.name).map((it) => ({
+      owner_id: user.id, name: it.name, amount: it.amount, unit: it.unit,
+    }));
+    const { error } = await supabase.from("shopping_items").insert(rows);
+    if (error) toast.error(error.message); else toast.success(`${rows.length} Artikel zur Einkaufsliste hinzugefügt`);
+  };
+
+  const addMissingToShopping = async () => {
+    if (!user || !recipe) return;
+    const need = parseIngredients(recipe.ingredients, factor);
+    const { data: inv } = await supabase.from("inventory_items").select("*").eq("owner_id", user.id);
+    const rows: any[] = [];
+    for (const it of need) {
+      const have = (inv ?? []).find((x: any) => x.name.toLowerCase() === it.name.toLowerCase() && (x.unit ?? "").toLowerCase() === (it.unit ?? "").toLowerCase());
+      const diff = it.amount - Number(have?.amount ?? 0);
+      if (diff > 0) rows.push({ owner_id: user.id, name: it.name, amount: diff, unit: it.unit });
+    }
+    if (rows.length === 0) { toast.success("Alles vorhanden – nichts ergänzt"); return; }
+    const { error } = await supabase.from("shopping_items").insert(rows);
+    if (error) toast.error(error.message); else toast.success(`${rows.length} fehlende Artikel ergänzt`);
+  };
+
+  const subtractFromInventory = async () => {
+    if (!user || !recipe) return;
+    const need = parseIngredients(recipe.ingredients, factor);
+    const { data: inv } = await supabase.from("inventory_items").select("*").eq("owner_id", user.id);
+    for (const it of need) {
+      const existing = (inv ?? []).find((x: any) => x.name.toLowerCase() === it.name.toLowerCase() && (x.unit ?? "").toLowerCase() === (it.unit ?? "").toLowerCase());
+      if (existing) {
+        const newAmt = Math.max(0, Number(existing.amount) - it.amount);
+        await supabase.from("inventory_items").update({ amount: newAmt }).eq("id", existing.id);
+      }
+    }
+    toast.success("Mengen vom Inventar abgezogen"); setConfirmCooked(false);
   };
 
   const addTag = async () => {
