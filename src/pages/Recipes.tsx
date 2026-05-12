@@ -6,20 +6,24 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Star, EyeOff, Eye, Clock, RotateCcw, Users } from "lucide-react";
+import { Plus, Star, EyeOff, Eye, Clock, RotateCcw, Users, Trash2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { formatTime } from "@/lib/timeFormat";
 import { CategoryRow, formatCategoryPath, getDescendantIds, getRoots, getChildren } from "@/lib/categories";
+import { softDeleteRecipe, TIER_COLOR } from "@/lib/recipeAdmin";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface Recipe {
   id: string; title: string; description: string | null; image_url: string | null;
   category_id: string | null; author_id: string; forced_visible: boolean; is_draft: boolean;
   time_required: string; tags: string[]; servings: number; servings_unit: string;
+  protection_tier?: number;
 }
 interface Profile { id: string; display_name: string | null; }
 
 export default function Recipes() {
-  const { user } = useAuth();
+  const { user, isAdmin, tier } = useAuth();
+  const [toDelete, setToDelete] = useState<Recipe | null>(null);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
