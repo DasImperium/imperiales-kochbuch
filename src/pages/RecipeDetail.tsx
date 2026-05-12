@@ -341,6 +341,41 @@ ${recipe.description ? `<p>${esc(recipe.description)}</p>` : ""}
           <Comments recipeId={recipe.id} />
         </div>
       </article>
+
+      {/* Lösch-Bestätigung */}
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Wollen Sie „{recipe.title}" wirklich löschen?</AlertDialogTitle>
+            <AlertDialogDescription>Wird ausgeblendet, im Admin-Bereich wiederherstellbar.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Nein</AlertDialogCancel>
+            <AlertDialogAction className="bg-[#C0392B] text-white hover:bg-[#A93226]" onClick={doDelete}>Ja, löschen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Gekocht-Bestätigung */}
+      <AlertDialog open={confirmCooked} onOpenChange={setConfirmCooked}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{recipe.title} – als gekocht markieren?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Für {servings} {recipe.servings_unit} werden folgende Mengen vom Inventar abgezogen:
+              <ul className="mt-2 max-h-48 overflow-y-auto text-xs space-y-0.5">
+                {parseIngredients(recipe.ingredients, factor).slice(0, 30).map((it, i) => (
+                  <li key={i}>• {it.amount > 0 ? `${it.amount.toFixed(1)} ${it.unit} ` : ""}{it.name}</li>
+                ))}
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Nein</AlertDialogCancel>
+            <AlertDialogAction className="bg-[#FFD700] text-black hover:bg-[#FFC700]" onClick={subtractFromInventory}>Ja, abziehen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
