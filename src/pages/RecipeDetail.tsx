@@ -212,7 +212,14 @@ ${recipe.description ? `<p>${esc(recipe.description)}</p>` : ""}
       <article className="recipe-card overflow-hidden">
         {recipe.image_url && <img src={recipe.image_url} alt={recipe.title} className="w-full h-64 object-cover" />}
         <div className="p-6">
-          <h1 className="imperial-heading text-3xl mb-1 text-content-fg">{recipe.title}</h1>
+          <h1 className="imperial-heading text-3xl mb-1 text-content-fg break-words whitespace-normal flex items-center gap-2 flex-wrap">
+            {(recipe.protection_tier ?? 0) > 0 && isAdmin && (
+              <span title={`${TIER_LABEL[recipe.protection_tier!]}-Schutz`} style={{ color: TIER_COLOR[recipe.protection_tier!] }}>
+                <Lock className="w-6 h-6" />
+              </span>
+            )}
+            <span className="break-words">{recipe.title}</span>
+          </h1>
 
           <div className="flex items-center gap-3 mb-3 flex-wrap">
             <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded bg-black text-[#FFD700]">
@@ -272,14 +279,39 @@ ${recipe.description ? `<p>${esc(recipe.description)}</p>` : ""}
                 <Link to={`/recipes/${recipe.id}/edit`}><Edit3 className="w-4 h-4 mr-1" /> Bearbeiten</Link>
               </Button>
             )}
-            {isAdmin && (
-              <Button onClick={adminDelete} variant="destructive" size="sm">
+            {(canEdit || isAdmin) && (
+              <Button onClick={() => setConfirmDelete(true)} variant="destructive" size="sm">
                 <Trash2 className="w-4 h-4 mr-1" /> Löschen
               </Button>
             )}
+            <Button onClick={addToShopping} variant="default" size="sm">
+              <ShoppingCart className="w-4 h-4 mr-1" />Zur Einkaufsliste
+            </Button>
+            <Button onClick={addMissingToShopping} variant="default" size="sm">
+              <Plus className="w-4 h-4 mr-1" />Fehlendes ergänzen
+            </Button>
+            <Button onClick={() => setConfirmCooked(true)} variant="gold" size="sm">
+              <ChefHat className="w-4 h-4 mr-1" />Gekocht
+            </Button>
+            {/* Schutz setzen (nur Admin+) */}
+            {isAdmin && (
+              <Select value={String(recipe.protection_tier ?? 0)} onValueChange={async (v) => {
+                const t = parseInt(v, 10);
+                if (t > tier) { toast.error("Höhere Stufe als deine"); return; }
+                const ok = await setProtection(recipe.id, t); if (ok) { toast.success("Schutz gesetzt"); load(); }
+              }}>
+                <SelectTrigger className="w-[180px] bg-white text-black h-9"><SelectValue placeholder="Schutz" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Kein Schutz</SelectItem>
+                  <SelectItem value="2" disabled={tier < 2}>Admin-Schutz (rot)</SelectItem>
+                  <SelectItem value="3" disabled={tier < 3}>Superadmin-Schutz (blau)</SelectItem>
+                  <SelectItem value="4" disabled={tier < 4}>Imperator-Schutz (grün)</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
-          {recipe.description && <p className="mb-4 text-content-fg/80 leading-relaxed">{recipe.description}</p>}
+          {recipe.description && <p className="mb-4 text-content-fg/80 leading-relaxed break-words">{recipe.description}</p>}
 
           <h2 className="imperial-heading text-xl text-[#006400] mt-6 mb-2">Zutaten</h2>
           <div className="gold-divider mb-3" />
