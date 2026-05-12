@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Star, Heart, FileDown, Edit3, Trash2, Copy, Plus, Clock, Users } from "lucide-react";
+import { Star, Heart, FileDown, Edit3, Trash2, Copy, Plus, Clock, Users, Lock, ShoppingCart, ChefHat } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import Comments from "@/components/Comments";
@@ -15,6 +15,13 @@ import { formatTime } from "@/lib/timeFormat";
 import { scaleIngredientsText } from "@/lib/scaling";
 import ServingsControl from "@/components/ServingsControl";
 import { CategoryRow, formatCategoryPath } from "@/lib/categories";
+import { softDeleteRecipe, setProtection, TIER_COLOR, TIER_LABEL } from "@/lib/recipeAdmin";
+import { parseIngredients } from "@/lib/ingredients";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const titleSchema = z.string().trim().min(2).max(140);
 
@@ -22,13 +29,15 @@ interface Recipe {
   id: string; title: string; description: string | null; ingredients: string | null;
   instructions: string | null; image_url: string | null; category_id: string | null;
   author_id: string; created_at: string; time_required: string; tags: string[];
-  servings: number; servings_unit: string;
+  servings: number; servings_unit: string; protection_tier?: number; deleted_at?: string | null;
 }
 
 export default function RecipeDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isSuperadmin, isImperator, tier } = useAuth();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmCooked, setConfirmCooked] = useState(false);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [author, setAuthor] = useState<string>("");
   const [categories, setCategories] = useState<CategoryRow[]>([]);
