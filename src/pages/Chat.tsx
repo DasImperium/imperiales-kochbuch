@@ -127,14 +127,18 @@ export default function Chat() {
           )}
           {!broadcast && (
             <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-1 max-h-48 overflow-y-auto">
-              {contacts.map((c) => (
-                <label key={c.id} className="flex items-center gap-2 text-sm text-black bg-gray-100 rounded px-2 py-1">
-                  <Checkbox checked={selected.has(c.id)} onCheckedChange={(v) => {
-                    const s = new Set(selected); v ? s.add(c.id) : s.delete(c.id); setSelected(s);
-                  }} />
-                  {c.display_name || "Unbekannt"}
-                </label>
-              ))}
+              {contacts.map((c) => {
+                const sel = selected.has(c.id);
+                return (
+                  <label key={c.id}
+                    className={`flex items-center gap-2 text-sm rounded px-2 py-1 cursor-pointer font-medium break-words transition-colors ${sel ? "bg-black text-[#00C853]" : "bg-[#FFFF00] text-black"}`}>
+                    <Checkbox checked={sel} onCheckedChange={(v) => {
+                      const s = new Set(selected); v ? s.add(c.id) : s.delete(c.id); setSelected(s);
+                    }} />
+                    <span className="break-words">{c.display_name || "Unbekannt"}</span>
+                  </label>
+                );
+              })}
             </div>
           )}
           <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Nachricht…" className="bg-white text-black" maxLength={2000} />
