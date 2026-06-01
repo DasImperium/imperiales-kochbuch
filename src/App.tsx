@@ -17,6 +17,7 @@ import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import Search from "./pages/Search";
 import MyRecipes from "./pages/MyRecipes";
+import MyDrafts from "./pages/MyDrafts";
 import Menus from "./pages/Menus";
 import MenuDetail from "./pages/MenuDetail";
 import Inventory from "./pages/Inventory";
@@ -50,6 +51,7 @@ const App = () => (
           <Route path="/admin" element={<Protected><Admin /></Protected>} />
           <Route path="/search" element={<Protected><Search /></Protected>} />
           <Route path="/my-recipes" element={<Protected><MyRecipes /></Protected>} />
+          <Route path="/my-drafts" element={<Protected><MyDrafts /></Protected>} />
           <Route path="/menus" element={<Protected><Menus /></Protected>} />
           <Route path="/menus/:id" element={<Protected><MenuDetail /></Protected>} />
           <Route path="/inventory" element={<Protected><Inventory /></Protected>} />

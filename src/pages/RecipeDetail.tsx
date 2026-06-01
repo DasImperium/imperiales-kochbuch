@@ -284,11 +284,11 @@ ${recipe.description ? `<p>${esc(recipe.description)}</p>` : ""}
                 <Trash2 className="w-4 h-4 mr-1" /> Löschen
               </Button>
             )}
-            <Button onClick={addToShopping} variant="default" size="sm">
+            <Button onClick={addToShopping} variant="blue" size="sm">
               <ShoppingCart className="w-4 h-4 mr-1" />Zur Einkaufsliste
             </Button>
-            <Button onClick={addMissingToShopping} variant="default" size="sm">
-              <Plus className="w-4 h-4 mr-1" />Fehlendes ergänzen
+            <Button onClick={addMissingToShopping} variant="blue" size="sm">
+              <ShoppingCart className="w-4 h-4 mr-1" />Fehlendes ergänzen
             </Button>
             <Button onClick={() => setConfirmCooked(true)} variant="gold" size="sm">
               <ChefHat className="w-4 h-4 mr-1" />Gekocht

@@ -17,6 +17,8 @@ const buttonVariants = cva(
         ghost: "hover:bg-black/10 text-black",
         link: "text-primary underline-offset-4 hover:underline",
         gold: "bg-[#FFD700] text-black hover:bg-[#FFC700] border border-[#FFD700]",
+        // RAL 5002 Ultramarinblau, weiße Schrift – für Einkaufslisten-Aktionen
+        blue: "bg-[#20214F] text-white hover:bg-[#191A3F] border border-[#20214F]",
       },
       size: {
         default: "h-10 px-4 py-2",
