@@ -15,16 +15,22 @@ interface UserRow { id: string; display_name: string | null; email: string | nul
 export default function Admin() {
   const { isAdmin, user, loading, tier, isImperator, refreshRoles } = useAuth();
   const [requests, setRequests] = useState<any[]>([]);
+  const [requestStatus, setRequestStatus] = useState<string>("pending");
   const [recipes, setRecipes] = useState<any[]>([]);
   const [tombstones, setTombstones] = useState<any[]>([]);
+  const [tombFilter, setTombFilter] = useState<string>("all");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [userRoles, setUserRoles] = useState<Record<string, Role[]>>({});
   const [grantEmail, setGrantEmail] = useState("");
   const [grantRole, setGrantRole] = useState<Role>("admin");
 
   const load = async () => {
+    let rqQuery: any = supabase.from("deletion_requests")
+      .select("*, recipe:recipes(title), requester:profiles!deletion_requests_requester_id_fkey(display_name)")
+      .order("created_at", { ascending: false });
+    if (requestStatus !== "all") rqQuery = rqQuery.eq("status", requestStatus);
     const [{ data: rq }, { data: rs }, { data: tomb }, { data: profs }, { data: rls }] = await Promise.all([
-      supabase.from("deletion_requests").select("*, recipe:recipes(title), requester:profiles!deletion_requests_requester_id_fkey(display_name)").eq("status", "pending").order("created_at", { ascending: false }),
+      rqQuery,
       supabase.from("recipes").select("id,title,forced_visible,protection_tier").is("deleted_at", null).order("created_at", { ascending: false }).limit(80),
       supabase.from("recipes").select("id,title,deleted_at,deleted_by_tier,deleted_by_user,protection_tier").not("deleted_at", "is", null).order("deleted_at", { ascending: false }),
       supabase.from("profiles").select("id,display_name,email").order("display_name"),
@@ -38,7 +44,7 @@ export default function Admin() {
     (rls ?? []).forEach((r: any) => { (map[r.user_id] ??= []).push(r.role); });
     setUserRoles(map);
   };
-  useEffect(() => { if (isAdmin) load(); }, [isAdmin]);
+  useEffect(() => { if (isAdmin) load(); }, [isAdmin, requestStatus]);
 
   if (loading) return <div className="p-8">Lade…</div>;
   if (!isAdmin) return <div className="container mx-auto p-8 text-center text-foreground/70">Kein Admin-Zugriff.</div>;
@@ -116,47 +122,74 @@ export default function Admin() {
         <span className="ml-2 text-xs px-2 py-1 rounded bg-white text-black font-bold">{TIER_LABEL[tier] ?? "Nutzer"}</span>
       </div>
 
-      {/* Löschanträge */}
+      {/* Löschanträge mit Status-Filter */}
       <Card className="imperial-surface border-gold/30 p-6 mb-6">
-        <h2 className="imperial-heading text-xl text-gold mb-3">Löschanträge ({requests.length})</h2>
-        {requests.length === 0 ? <p className="text-surface-foreground/60 text-sm">Keine offenen Anträge.</p> : (
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h2 className="imperial-heading text-xl text-gold">Löschanträge ({requests.length})</h2>
+          <Select value={requestStatus} onValueChange={setRequestStatus}>
+            <SelectTrigger className="w-[200px] bg-white text-black"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending">Offen</SelectItem>
+              <SelectItem value="approved">Genehmigt</SelectItem>
+              <SelectItem value="rejected">Abgelehnt</SelectItem>
+              <SelectItem value="all">Alle</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {requests.length === 0 ? <p className="text-surface-foreground/60 text-sm">Keine Anträge.</p> : (
           <ul className="space-y-2">
             {requests.map((r) => (
               <li key={r.id} className="flex items-center justify-between gap-2 p-2 bg-background/40 rounded flex-wrap">
-                <div className="text-sm">
-                  <Link to={`/recipes/${r.recipe_id}`} className="text-gold hover:underline break-words">{r.recipe?.title}</Link>
+                <div className="text-sm min-w-0 flex-1">
+                  <Link to={`/recipes/${r.recipe_id}`} className="text-gold hover:underline break-words">{r.recipe?.title ?? "(unbekannt)"}</Link>
                   <span className="text-surface-foreground/60"> — von {r.requester?.display_name ?? "?"}</span>
+                  <span className="ml-2 text-[10px] px-2 py-0.5 rounded bg-white text-black font-bold uppercase">{r.status}</span>
                   {r.reason && <div className="text-xs text-surface-foreground/60 break-words">„{r.reason}"</div>}
                 </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="destructive" onClick={() => approve(r)}>Löschen</Button>
-                  <Button size="sm" variant="outline" onClick={() => reject(r)}>Ablehnen</Button>
-                </div>
+                {r.status === "pending" && (
+                  <div className="flex gap-2 shrink-0">
+                    <Button size="sm" variant="destructive" onClick={() => approve(r)}>Löschen</Button>
+                    <Button size="sm" variant="outline" onClick={() => reject(r)}>Ablehnen</Button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
         )}
       </Card>
 
-      {/* Tombstones */}
+      {/* Tombstones nach Stufe gruppiert */}
       <Card className="imperial-surface border-gold/30 p-6 mb-6">
-        <h2 className="imperial-heading text-xl text-gold mb-3">Gelöschte Rezepte (für deine Stufe sichtbar)</h2>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h2 className="imperial-heading text-xl text-gold">Gelöschte Rezepte ({tombstones.length})</h2>
+          <Select value={tombFilter} onValueChange={setTombFilter}>
+            <SelectTrigger className="w-[220px] bg-white text-black"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Stufen</SelectItem>
+              <SelectItem value="2">Nur Admin-Löschungen</SelectItem>
+              <SelectItem value="3">Nur Superadmin-Löschungen</SelectItem>
+              <SelectItem value="4">Nur Imperator-Löschungen</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         {tombstones.length === 0 ? <p className="text-surface-foreground/60 text-sm">Keine gelöschten Rezepte.</p> : (
           <ul className="space-y-1 max-h-96 overflow-y-auto">
-            {tombstones.map((r) => (
+            {tombstones
+              .filter((r) => tombFilter === "all" || String(r.deleted_by_tier) === tombFilter)
+              .map((r) => (
               <li key={r.id} className="flex items-center justify-between gap-2 px-2 py-1 hover:bg-background/40 rounded flex-wrap">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   {(r.protection_tier ?? 0) > 0 && (
                     <Lock className="w-4 h-4 shrink-0" style={{ color: TIER_COLOR[r.protection_tier!] }} />
                   )}
-                  <span className="text-sm text-surface-foreground break-words flex-1 min-w-0">{r.title}</span>
+                  <Link to={`/recipes/${r.id}`} className="text-sm text-surface-foreground hover:text-gold break-words flex-1 min-w-0">{r.title}</Link>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-white text-black font-bold shrink-0">
                     gelöscht durch {TIER_LABEL[r.deleted_by_tier ?? 2] ?? "?"}
                   </span>
                 </div>
                 <div className="flex gap-1 shrink-0">
                   <Button size="sm" variant="outline" onClick={() => restore(r)}><RotateCcw className="w-3 h-3 mr-1" />Wiederherstellen</Button>
-                  <Button size="sm" variant="outline" onClick={() => copyAsNew(r)}><Copy className="w-3 h-3 mr-1" />Als Kopie veröffentlichen</Button>
+                  <Button size="sm" variant="outline" onClick={() => copyAsNew(r)}><Copy className="w-3 h-3 mr-1" />Als Kopie</Button>
                   <Button size="sm" variant="destructive" onClick={() => purge(r)}><Trash2 className="w-3 h-3 mr-1" />Endgültig</Button>
                 </div>
               </li>

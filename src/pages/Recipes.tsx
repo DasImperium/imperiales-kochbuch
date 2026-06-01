@@ -121,9 +121,14 @@ export default function Recipes() {
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="imperial-heading text-3xl text-gold">Rezeptsammlung</h1>
-        <Button asChild variant="gold">
-          <Link to="/recipes/new"><Plus className="w-4 h-4 mr-1" /> Neues Rezept</Link>
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button asChild variant="gold">
+            <Link to="/recipes/new"><Plus className="w-4 h-4 mr-1" /> Neues Rezept</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/my-drafts">Meine Entwürfe</Link>
+          </Button>
+        </div>
       </div>
 
       <Card className="imperial-surface border-gold/30 p-4 mb-6 space-y-3">

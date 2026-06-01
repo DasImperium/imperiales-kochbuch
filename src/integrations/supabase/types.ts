@@ -127,6 +127,9 @@ export type Database = {
           reason: string | null
           recipe_id: string
           requester_id: string
+          resolved_at: string | null
+          resolver_id: string | null
+          resolver_note: string | null
           status: string
         }
         Insert: {
@@ -135,6 +138,9 @@ export type Database = {
           reason?: string | null
           recipe_id: string
           requester_id: string
+          resolved_at?: string | null
+          resolver_id?: string | null
+          resolver_note?: string | null
           status?: string
         }
         Update: {
@@ -143,6 +149,9 @@ export type Database = {
           reason?: string | null
           recipe_id?: string
           requester_id?: string
+          resolved_at?: string | null
+          resolver_id?: string | null
+          resolver_note?: string | null
           status?: string
         }
         Relationships: [
@@ -212,8 +221,10 @@ export type Database = {
           amount: number
           created_at: string
           id: string
+          min_stock: number
           name: string
           owner_id: string
+          safety_stock: number
           unit: string
           updated_at: string
         }
@@ -221,8 +232,10 @@ export type Database = {
           amount?: number
           created_at?: string
           id?: string
+          min_stock?: number
           name: string
           owner_id: string
+          safety_stock?: number
           unit?: string
           updated_at?: string
         }
@@ -230,8 +243,10 @@ export type Database = {
           amount?: number
           created_at?: string
           id?: string
+          min_stock?: number
           name?: string
           owner_id?: string
+          safety_stock?: number
           unit?: string
           updated_at?: string
         }

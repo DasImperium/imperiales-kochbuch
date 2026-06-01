@@ -6,7 +6,7 @@ export interface CategoryRow {
   created_by?: string | null;
 }
 
-export const ROOT_CATEGORY_NAMES = ["Kochen", "Backen", "Salate", "Desserts", "Getränke"] as const;
+export const ROOT_CATEGORY_NAMES = ["Kochen", "Backen", "Dessert", "Getränke"] as const;
 
 export function getCategoryPath(id: string | null, all: CategoryRow[]): CategoryRow[] {
   const path: CategoryRow[] = [];
