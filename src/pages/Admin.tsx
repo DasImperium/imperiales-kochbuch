@@ -15,16 +15,22 @@ interface UserRow { id: string; display_name: string | null; email: string | nul
 export default function Admin() {
   const { isAdmin, user, loading, tier, isImperator, refreshRoles } = useAuth();
   const [requests, setRequests] = useState<any[]>([]);
+  const [requestStatus, setRequestStatus] = useState<string>("pending");
   const [recipes, setRecipes] = useState<any[]>([]);
   const [tombstones, setTombstones] = useState<any[]>([]);
+  const [tombFilter, setTombFilter] = useState<string>("all");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [userRoles, setUserRoles] = useState<Record<string, Role[]>>({});
   const [grantEmail, setGrantEmail] = useState("");
   const [grantRole, setGrantRole] = useState<Role>("admin");
 
   const load = async () => {
+    let rqQuery: any = supabase.from("deletion_requests")
+      .select("*, recipe:recipes(title), requester:profiles!deletion_requests_requester_id_fkey(display_name)")
+      .order("created_at", { ascending: false });
+    if (requestStatus !== "all") rqQuery = rqQuery.eq("status", requestStatus);
     const [{ data: rq }, { data: rs }, { data: tomb }, { data: profs }, { data: rls }] = await Promise.all([
-      supabase.from("deletion_requests").select("*, recipe:recipes(title), requester:profiles!deletion_requests_requester_id_fkey(display_name)").eq("status", "pending").order("created_at", { ascending: false }),
+      rqQuery,
       supabase.from("recipes").select("id,title,forced_visible,protection_tier").is("deleted_at", null).order("created_at", { ascending: false }).limit(80),
       supabase.from("recipes").select("id,title,deleted_at,deleted_by_tier,deleted_by_user,protection_tier").not("deleted_at", "is", null).order("deleted_at", { ascending: false }),
       supabase.from("profiles").select("id,display_name,email").order("display_name"),
@@ -38,7 +44,7 @@ export default function Admin() {
     (rls ?? []).forEach((r: any) => { (map[r.user_id] ??= []).push(r.role); });
     setUserRoles(map);
   };
-  useEffect(() => { if (isAdmin) load(); }, [isAdmin]);
+  useEffect(() => { if (isAdmin) load(); }, [isAdmin, requestStatus]);
 
   if (loading) return <div className="p-8">Lade…</div>;
   if (!isAdmin) return <div className="container mx-auto p-8 text-center text-foreground/70">Kein Admin-Zugriff.</div>;
