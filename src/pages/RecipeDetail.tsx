@@ -363,9 +363,9 @@ ${recipe.description ? `<p>${esc(recipe.description)}</p>` : ""}
             <AlertDialogTitle>{recipe.title} – als gekocht markieren?</AlertDialogTitle>
             <AlertDialogDescription>
               Für {servings} {recipe.servings_unit} werden folgende Mengen vom Inventar abgezogen:
-              <ul className="mt-2 max-h-48 overflow-y-auto text-xs space-y-0.5">
+              <ul className="mt-2 max-h-48 overflow-y-auto text-xs space-y-0.5 font-mono">
                 {parseIngredients(recipe.ingredients, factor).slice(0, 30).map((it, i) => (
-                  <li key={i}>• {it.amount > 0 ? `${it.amount.toFixed(1)} ${it.unit} ` : ""}{it.name}</li>
+                  <li key={i}>• {it.amount > 0 ? `${it.amount.toFixed(1)} | ${it.unit || "—"} | ` : ""}{it.name}</li>
                 ))}
               </ul>
             </AlertDialogDescription>
