@@ -4,19 +4,19 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Trash2, Plus, History, Save, Share2, X, ArrowDownAZ, AlertTriangle } from "lucide-react";
+import { Trash2, Plus, History, Save, Share2, X, ArrowDownAZ, AlertTriangle, Users } from "lucide-react";
 import { toast } from "sonner";
-import { normalize, formatTriple, toBase } from "@/lib/units";
+import { normalize, toBase } from "@/lib/units";
+import { HINT_PREFIX } from "@/pages/Chat";
 
 interface Item {
   id: string; owner_id: string; name: string; amount: number; unit: string;
   safety_stock: number; min_stock: number;
 }
-interface Profile { id: string; display_name: string | null; email: string | null; }
+interface Profile { id: string; display_name: string | null; email: string | null; group_name: string | null; }
 
 const MAX_SNAPSHOTS = 2;
 
-/** Stufe: 0 = ok, 1 = unter Sicherheit (orange), 2 = unter Min (rot) */
 function level(it: Item): 0 | 1 | 2 {
   const cur = toBase(Number(it.amount), it.unit).amount;
   const safe = toBase(Number(it.safety_stock || 0), it.unit).amount;
@@ -31,28 +31,48 @@ const rowClass = (l: 0 | 1 | 2) =>
 export default function Inventory() {
   const { user } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
+  const [groupName, setGroupName] = useState<string>("");
+  const [groupMembers, setGroupMembers] = useState<Profile[]>([]);
   const [name, setName] = useState(""); const [amount, setAmount] = useState(""); const [unit, setUnit] = useState("");
   const [safety, setSafety] = useState(""); const [minS, setMinS] = useState("");
   const [shareEmail, setShareEmail] = useState("");
   const [shares, setShares] = useState<{ id: string; shared_with: string; profile?: Profile | null }[]>([]);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [warnedIds, setWarnedIds] = useState<Set<string>>(new Set());
+  const [sortAlpha, setSortAlpha] = useState(true);
 
   const load = async () => {
     if (!user) return;
-    const { data } = await supabase.from("inventory_items").select("*").eq("owner_id", user.id).order("name");
+    // Eigene Gruppe
+    const { data: me } = await supabase.from("profiles").select("group_name").eq("id", user.id).maybeSingle();
+    const gn = (me?.group_name ?? "").trim();
+    setGroupName(gn);
+
+    // Owner-IDs: ich + alle in selber Gruppe + alle, die mir freigegeben haben
+    const ownerIds = new Set<string>([user.id]);
+    if (gn) {
+      const { data: mates } = await supabase.from("profiles").select("id,display_name,email,group_name").ilike("group_name", gn);
+      (mates ?? []).forEach((m: any) => ownerIds.add(m.id));
+      setGroupMembers((mates ?? []) as Profile[]);
+    } else setGroupMembers([]);
+
+    const { data: sharedTo } = await supabase.from("list_shares").select("owner_id").eq("shared_with", user.id).eq("list_kind", "inventory");
+    (sharedTo ?? []).forEach((s: any) => ownerIds.add(s.owner_id));
+
+    const { data } = await supabase.from("inventory_items").select("*").in("owner_id", Array.from(ownerIds)).order("name");
     const list = (data ?? []) as Item[];
     setItems(list);
+
     const { data: sh } = await supabase.from("list_shares").select("*").eq("owner_id", user.id).eq("list_kind", "inventory");
     if (sh && sh.length) {
-      const { data: ps } = await supabase.from("profiles").select("id,display_name,email").in("id", sh.map((s: any) => s.shared_with));
-      setShares(sh.map((s: any) => ({ id: s.id, shared_with: s.shared_with, profile: ps?.find((p: any) => p.id === s.shared_with) ?? null })));
+      const { data: ps } = await supabase.from("profiles").select("id,display_name,email,group_name").in("id", sh.map((s: any) => s.shared_with));
+      setShares(sh.map((s: any) => ({ id: s.id, shared_with: s.shared_with, profile: (ps as any)?.find((p: any) => p.id === s.shared_with) ?? null })));
     } else setShares([]);
+
     const { data: snaps } = await supabase.from("list_snapshots").select("*").eq("owner_id", user.id).eq("list_kind", "inventory").order("created_at", { ascending: false }).limit(MAX_SNAPSHOTS);
     setSnapshots(snaps ?? []);
 
-    // Warnungen prüfen (einmal pro Session pro item)
-    checkAndNotify(list);
+    checkAndNotify(list.filter((i) => i.owner_id === user.id));
   };
   useEffect(() => { load(); }, [user]);
 
@@ -61,20 +81,28 @@ export default function Inventory() {
     const ch = supabase.channel("inv-all")
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "list_shares" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, load)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [user]);
 
-  const checkAndNotify = async (list: Item[]) => {
+  const saveGroup = async () => {
+    if (!user) return;
+    const gn = groupName.trim().slice(0, 60);
+    await supabase.from("profiles").update({ group_name: gn || null }).eq("id", user.id);
+    toast.success(gn ? `Gruppe gesetzt: ${gn}` : "Gruppe entfernt");
+    load();
+  };
+
+  const checkAndNotify = async (mine: Item[]) => {
     if (!user) return;
     const newWarn = new Set(warnedIds);
-    for (const it of list) {
+    for (const it of mine) {
       const l = level(it);
       const key = `${it.id}:${l}`;
       if (l === 0 || newWarn.has(key)) continue;
       newWarn.add(key);
       if (l === 2) {
-        // Auto-Eintrag in die Einkaufsliste mit Mindestmenge
         const minAmount = Number(it.min_stock || 0);
         if (minAmount > 0) {
           const { data: existing } = await supabase.from("shopping_items").select("id,amount")
@@ -87,12 +115,12 @@ export default function Inventory() {
         }
         await supabase.from("chat_messages").insert({
           sender_id: user.id, recipient_id: user.id,
-          content: `Achtung: Mindestbestand für ${it.name} unterschritten – ${it.min_stock} ${it.unit} der Einkaufsliste hinzugefügt.`,
+          content: `${HINT_PREFIX}Achtung: Mindestbestand für ${it.name} unterschritten – ${it.min_stock} ${it.unit} der Einkaufsliste hinzugefügt.`,
         });
       } else if (l === 1) {
         await supabase.from("chat_messages").insert({
           sender_id: user.id, recipient_id: user.id,
-          content: `Warnung: Sicherheitsbestand für ${it.name} (${it.amount} ${it.unit}) unterschritten.`,
+          content: `${HINT_PREFIX}Warnung: Sicherheitsbestand für ${it.name} (${it.amount} ${it.unit}) unterschritten.`,
         });
       }
     }
@@ -100,8 +128,10 @@ export default function Inventory() {
   };
 
   const sortedItems = useMemo(() => {
-    return [...items].sort((a, b) => a.name.localeCompare(b.name, "de"));
-  }, [items]);
+    const arr = [...items];
+    if (sortAlpha) arr.sort((a, b) => a.name.localeCompare(b.name, "de"));
+    return arr;
+  }, [items, sortAlpha]);
 
   const add = async () => {
     if (!user || !name.trim()) return;
@@ -121,9 +151,9 @@ export default function Inventory() {
     load();
   };
 
-  const remove = async (id: string) => {
-    if (!confirm("Eintrag löschen?")) return;
-    await supabase.from("inventory_items").delete().eq("id", id); load();
+  const remove = async (it: Item) => {
+    if (!confirm(`Wollen Sie "${it.name}" wirklich löschen?`)) return;
+    await supabase.from("inventory_items").delete().eq("id", it.id); load();
   };
 
   const snapshot = async () => {
@@ -159,6 +189,23 @@ export default function Inventory() {
     <div className="container mx-auto px-4 py-8 max-w-5xl">
       <h1 className="imperial-heading text-3xl text-gold mb-4 break-words">Inventar</h1>
 
+      {/* Gruppensynchronisation */}
+      <Card className="bg-white text-black border-gold/30 p-4 mb-4">
+        <h3 className="font-bold text-[#006400] mb-2 flex items-center gap-2"><Users className="w-4 h-4" />Gruppe (Echtzeit-Sync)</h3>
+        <div className="flex gap-2 items-end flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-xs">Gruppenname (alle mit gleichem Namen teilen Inventar &amp; Einkauf)</label>
+            <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="z. B. Haushalt Meier" className="bg-white text-black" />
+          </div>
+          <Button onClick={saveGroup} variant="gold">Speichern</Button>
+        </div>
+        {groupName && groupMembers.length > 0 && (
+          <p className="text-xs text-content-fg/70 mt-2">
+            Mitglieder: {groupMembers.map((m) => m.display_name || m.email || m.id.slice(0, 6)).join(", ")}
+          </p>
+        )}
+      </Card>
+
       <Card className="bg-white text-black border-gold/30 p-4 mb-4">
         <div className="text-xs font-bold text-[#006400] mb-2">Neu: Menge | Einheit | Zutat | Sicherheitsbestand | Mindestbestand</div>
         <div className="grid grid-cols-2 md:grid-cols-[100px_100px_1fr_120px_120px_auto] gap-2 items-end">
@@ -178,55 +225,104 @@ export default function Inventory() {
 
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
         <p className="text-xs text-content-fg/70">Orange = unter Sicherheitsbestand · Rot = unter Mindestbestand</p>
-        <Button variant="outline" size="sm" onClick={() => setItems([...items].sort((a, b) => a.name.localeCompare(b.name, "de")))}>
-          <ArrowDownAZ className="w-4 h-4 mr-1" />Alphabetisch ordnen
+        <Button variant="outline" size="sm" onClick={() => setSortAlpha((v) => !v)}>
+          <ArrowDownAZ className="w-4 h-4 mr-1" />{sortAlpha ? "Standard-Sortierung" : "Alphabetisch ordnen"}
         </Button>
       </div>
 
+      {/* Desktop: Tabelle. Mobil: Cards (volle Sichtbarkeit, deutliche Trennung) */}
       <Card className="bg-white text-black border-gold/30 p-0 mb-4 overflow-x-auto">
         {sortedItems.length === 0 ? <p className="text-sm text-content-fg/60 p-3">Noch keine Einträge.</p> : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-100 text-[#006400]">
-              <tr>
-                <th className="text-left p-2">Menge</th><th className="text-left p-2">Einheit</th>
-                <th className="text-left p-2">Zutat</th>
-                <th className="text-left p-2">Sicherh.</th><th className="text-left p-2">Min.</th>
-                <th className="p-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedItems.map((it) => {
+          <>
+            {/* Desktop / Tablet */}
+            <table className="w-full text-sm hidden md:table">
+              <thead className="bg-gray-100 text-[#006400]">
+                <tr>
+                  <th className="text-left p-2">Menge</th><th className="text-left p-2">Einheit</th>
+                  <th className="text-left p-2">Zutat</th>
+                  <th className="text-left p-2">Sicherh.</th><th className="text-left p-2">Min.</th>
+                  <th className="p-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedItems.map((it) => {
+                  const l = level(it);
+                  const own = it.owner_id === user?.id;
+                  return (
+                    <tr key={it.id} className={`border-t ${rowClass(l)}`}>
+                      <td className="p-1 w-24"><Input defaultValue={String(it.amount)} inputMode="decimal" disabled={!own} onBlur={(e) => {
+                        const v = parseFloat(e.target.value.replace(",", ".")); if (!isNaN(v) && v !== it.amount) {
+                          const n = normalize(v, it.unit); update(it, { amount: n.amount, unit: n.unit });
+                        }
+                      }} className="bg-white text-black h-8" /></td>
+                      <td className="p-1 w-20"><Input defaultValue={it.unit} disabled={!own} onBlur={(e) => e.target.value !== it.unit && update(it, { unit: e.target.value })} className="bg-white text-black h-8" /></td>
+                      <td className="p-1"><Input defaultValue={it.name} disabled={!own} onBlur={(e) => e.target.value !== it.name && update(it, { name: e.target.value })} className="bg-white text-black h-8" /></td>
+                      <td className="p-1 w-24"><Input defaultValue={String(it.safety_stock ?? 0)} inputMode="decimal" disabled={!own} onBlur={(e) => {
+                        const v = parseFloat(e.target.value.replace(",", ".")); if (!isNaN(v)) update(it, { safety_stock: v });
+                      }} className="bg-white text-black h-8" /></td>
+                      <td className="p-1 w-24"><Input defaultValue={String(it.min_stock ?? 0)} inputMode="decimal" disabled={!own} onBlur={(e) => {
+                        const v = parseFloat(e.target.value.replace(",", ".")); if (!isNaN(v)) update(it, { min_stock: v });
+                      }} className="bg-white text-black h-8" /></td>
+                      <td className="p-1 w-10">
+                        {l > 0 && <AlertTriangle className={`w-4 h-4 inline mr-1 ${l === 2 ? "text-red-700" : "text-orange-600"}`} />}
+                        {own && <Button size="icon" variant="destructive" className="h-7 w-7" onClick={() => remove(it)}><Trash2 className="w-3 h-3" /></Button>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* Mobile: vollständige Karte je Zutat */}
+            <ul className="md:hidden divide-y divide-gray-300">
+              {sortedItems.map((it, idx) => {
                 const l = level(it);
+                const own = it.owner_id === user?.id;
                 return (
-                  <tr key={it.id} className={`border-t ${rowClass(l)}`}>
-                    <td className="p-1 w-24"><Input defaultValue={String(it.amount)} inputMode="decimal" onBlur={(e) => {
-                      const v = parseFloat(e.target.value.replace(",", ".")); if (!isNaN(v) && v !== it.amount) {
-                        const n = normalize(v, it.unit); update(it, { amount: n.amount, unit: n.unit });
-                      }
-                    }} className="bg-white text-black h-8" /></td>
-                    <td className="p-1 w-20"><Input defaultValue={it.unit} onBlur={(e) => e.target.value !== it.unit && update(it, { unit: e.target.value })} className="bg-white text-black h-8" /></td>
-                    <td className="p-1"><Input defaultValue={it.name} onBlur={(e) => e.target.value !== it.name && update(it, { name: e.target.value })} className="bg-white text-black h-8" /></td>
-                    <td className="p-1 w-24"><Input defaultValue={String(it.safety_stock ?? 0)} inputMode="decimal" onBlur={(e) => {
-                      const v = parseFloat(e.target.value.replace(",", ".")); if (!isNaN(v)) update(it, { safety_stock: v });
-                    }} className="bg-white text-black h-8" /></td>
-                    <td className="p-1 w-24"><Input defaultValue={String(it.min_stock ?? 0)} inputMode="decimal" onBlur={(e) => {
-                      const v = parseFloat(e.target.value.replace(",", ".")); if (!isNaN(v)) update(it, { min_stock: v });
-                    }} className="bg-white text-black h-8" /></td>
-                    <td className="p-1 w-10">
-                      {l > 0 && <AlertTriangle className={`w-4 h-4 inline mr-1 ${l === 2 ? "text-red-700" : "text-orange-600"}`} />}
-                      <Button size="icon" variant="destructive" className="h-7 w-7" onClick={() => remove(it.id)}><Trash2 className="w-3 h-3" /></Button>
-                    </td>
-                  </tr>
+                  <li key={it.id} className={`p-3 ${rowClass(l)} ${idx % 2 === 1 && l === 0 ? "bg-gray-50" : ""}`}>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-base break-words flex items-center gap-1">
+                          {l > 0 && <AlertTriangle className={`w-4 h-4 inline flex-shrink-0 ${l === 2 ? "text-red-700" : "text-orange-600"}`} />}
+                          <span className="break-words">{it.name}</span>
+                        </div>
+                      </div>
+                      {own && <Button size="icon" variant="destructive" className="h-8 w-8 flex-shrink-0" onClick={() => remove(it)}><Trash2 className="w-4 h-4" /></Button>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <label className="text-xs">Menge
+                        <Input defaultValue={String(it.amount)} inputMode="decimal" disabled={!own} onBlur={(e) => {
+                          const v = parseFloat(e.target.value.replace(",", ".")); if (!isNaN(v) && v !== it.amount) {
+                            const n = normalize(v, it.unit); update(it, { amount: n.amount, unit: n.unit });
+                          }
+                        }} className="bg-white text-black h-9 mt-1" />
+                      </label>
+                      <label className="text-xs">Einheit
+                        <Input defaultValue={it.unit} disabled={!own} onBlur={(e) => e.target.value !== it.unit && update(it, { unit: e.target.value })} className="bg-white text-black h-9 mt-1" />
+                      </label>
+                      <label className="text-xs">Sicherheitsbestand
+                        <Input defaultValue={String(it.safety_stock ?? 0)} inputMode="decimal" disabled={!own} onBlur={(e) => {
+                          const v = parseFloat(e.target.value.replace(",", ".")); if (!isNaN(v)) update(it, { safety_stock: v });
+                        }} className="bg-white text-black h-9 mt-1" />
+                      </label>
+                      <label className="text-xs">Mindestbestand
+                        <Input defaultValue={String(it.min_stock ?? 0)} inputMode="decimal" disabled={!own} onBlur={(e) => {
+                          const v = parseFloat(e.target.value.replace(",", ".")); if (!isNaN(v)) update(it, { min_stock: v });
+                        }} className="bg-white text-black h-9 mt-1" />
+                      </label>
+                    </div>
+                    {!own && <p className="text-[10px] text-content-fg/60 mt-1">Eintrag eines Gruppenmitglieds</p>}
+                  </li>
                 );
               })}
-            </tbody>
-          </table>
+            </ul>
+          </>
         )}
       </Card>
 
       <div className="grid md:grid-cols-2 gap-4">
         <Card className="bg-white text-black border-gold/30 p-4">
-          <h3 className="imperial-heading text-[#006400] mb-2 flex items-center gap-2"><Share2 className="w-4 h-4" />Freigeben (Echtzeit-Sync)</h3>
+          <h3 className="imperial-heading text-[#006400] mb-2 flex items-center gap-2"><Share2 className="w-4 h-4" />Freigeben per E-Mail</h3>
           <div className="flex gap-2 mb-3">
             <Input value={shareEmail} onChange={(e) => setShareEmail(e.target.value)} placeholder="E-Mail" className="bg-white text-black" />
             <Button onClick={share}>Teilen</Button>
