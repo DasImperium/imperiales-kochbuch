@@ -6,7 +6,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background text-foreground">
       <ImperialMenu />
       <DraftsPrompt />
-      <main className="pb-20 md:pb-0 md:pl-16 min-h-screen">
+      {/* Permanenter Linksabstand für die fixierte Menüleiste – nie Überlappung */}
+      <main className="pl-14 sm:pl-16 min-h-screen">
         {children}
       </main>
     </div>
