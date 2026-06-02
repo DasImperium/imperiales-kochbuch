@@ -15,13 +15,26 @@ const MAX_SNAPSHOTS = 2;
 export default function ShoppingList() {
   const { user } = useAuth();
   const [raw, setRaw] = useState<Item[]>([]);
+  const [ownerIds, setOwnerIds] = useState<string[]>([]);
   const [name, setName] = useState(""); const [amount, setAmount] = useState(""); const [unit, setUnit] = useState("");
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [sortAlpha, setSortAlpha] = useState(false);
 
   const load = async () => {
     if (!user) return;
-    const { data } = await supabase.from("shopping_items").select("*").eq("owner_id", user.id).order("checked").order("name");
+    const { data: me } = await supabase.from("profiles").select("group_name").eq("id", user.id).maybeSingle();
+    const gn = (me?.group_name ?? "").trim();
+    const ids = new Set<string>([user.id]);
+    if (gn) {
+      const { data: mates } = await supabase.from("profiles").select("id").ilike("group_name", gn);
+      (mates ?? []).forEach((m: any) => ids.add(m.id));
+    }
+    const { data: sharedTo } = await supabase.from("list_shares").select("owner_id").eq("shared_with", user.id).eq("list_kind", "shopping");
+    (sharedTo ?? []).forEach((s: any) => ids.add(s.owner_id));
+    const owners = Array.from(ids);
+    setOwnerIds(owners);
+
+    const { data } = await supabase.from("shopping_items").select("*").in("owner_id", owners).order("checked").order("name");
     setRaw((data ?? []) as Item[]);
     const { data: snaps } = await supabase.from("list_snapshots").select("*").eq("owner_id", user.id).eq("list_kind", "shopping").order("created_at", { ascending: false }).limit(MAX_SNAPSHOTS);
     setSnapshots(snaps ?? []);
@@ -31,11 +44,12 @@ export default function ShoppingList() {
     if (!user) return;
     const ch = supabase.channel("shop-all")
       .on("postgres_changes", { event: "*", schema: "public", table: "shopping_items" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "list_shares" }, load)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [user]);
 
-  /** Automatisches Summieren gleicher Zutat/Einheit (Anzeige). */
   const items = useMemo(() => {
     const groups = new Map<string, Item>();
     for (const it of raw) {
@@ -43,10 +57,7 @@ export default function ShoppingList() {
       const existing = groups.get(key);
       if (existing) {
         const sum = sumSameUnit({ amount: Number(existing.amount), unit: existing.unit }, { amount: Number(it.amount), unit: it.unit });
-        if (sum) {
-          existing.amount = sum.amount; existing.unit = sum.unit;
-          // Behalte erstes id zur Anzeige; Aktionen wirken auf alle Originale → siehe remove/toggle
-        }
+        if (sum) { existing.amount = sum.amount; existing.unit = sum.unit; }
       } else {
         const n = normalize(Number(it.amount), it.unit);
         groups.set(key, { ...it, amount: n.amount, unit: n.unit });
@@ -65,7 +76,6 @@ export default function ShoppingList() {
     setName(""); setAmount(""); setUnit(""); load();
   };
 
-  /** Auf alle Originale mit gleicher Name/Checked anwenden. */
   const allMatchingIds = (it: Item) =>
     raw.filter((r) => r.name.toLowerCase().trim() === it.name.toLowerCase().trim() && r.checked === it.checked).map((r) => r.id);
 
@@ -75,6 +85,7 @@ export default function ShoppingList() {
   };
 
   const remove = async (it: Item) => {
+    if (!confirm(`Wollen Sie "${it.name}" wirklich löschen?`)) return;
     const ids = allMatchingIds(it);
     await supabase.from("shopping_items").delete().in("id", ids); load();
   };
@@ -93,7 +104,6 @@ export default function ShoppingList() {
     toast.success("Wiederhergestellt"); load();
   };
 
-  /** Abgehakte ins Inventar verschieben (inkl. Summierung). */
   const moveCheckedToInventory = async () => {
     if (!user) return;
     const checked = items.filter((i) => i.checked);
@@ -118,6 +128,9 @@ export default function ShoppingList() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <h1 className="imperial-heading text-3xl text-gold mb-4 break-words">Einkaufsliste</h1>
+      {ownerIds.length > 1 && (
+        <p className="text-xs text-content-fg/70 mb-2">Synchronisiert mit {ownerIds.length - 1} weitere(n) Mitglied(ern).</p>
+      )}
 
       <Card className="bg-white text-black border-gold/30 p-4 mb-4">
         <div className="text-xs font-bold text-[#006400] mb-2">Format: Menge | Einheit | Zutat</div>
@@ -142,11 +155,11 @@ export default function ShoppingList() {
         {items.length === 0 ? <p className="text-sm text-content-fg/60 p-3">Liste ist leer.</p> : (
           <ul className="divide-y divide-gray-200">
             {items.map((it) => (
-              <li key={it.id} className={`flex items-center gap-2 p-2 ${it.checked ? "opacity-60" : ""}`}>
+              <li key={it.id} className={`flex items-center gap-2 p-2 flex-wrap ${it.checked ? "opacity-60" : ""}`}>
                 <Checkbox checked={it.checked} onCheckedChange={() => toggle(it)} />
-                <span className="w-24 text-right font-mono">{it.amount > 0 ? it.amount : ""}</span>
+                <span className="w-20 text-right font-mono">{it.amount > 0 ? it.amount : ""}</span>
                 <span className="w-16 text-sm text-gray-700">{it.unit}</span>
-                <span className={`flex-1 break-words ${it.checked ? "line-through" : ""}`}>{it.name}</span>
+                <span className={`flex-1 min-w-0 break-words ${it.checked ? "line-through" : ""}`}>{it.name}</span>
                 <Button size="icon" variant="destructive" onClick={() => remove(it)}><Trash2 className="w-4 h-4" /></Button>
               </li>
             ))}

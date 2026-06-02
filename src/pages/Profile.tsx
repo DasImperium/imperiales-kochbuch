@@ -15,6 +15,7 @@ export default function Profile() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState("");
+  const [groupName, setGroupName] = useState("");
   const [counts, setCounts] = useState({ favs: 0, hidden: 0, mine: 0, requests: 0 });
   const [showAdminScreen, setShowAdminScreen] = useState(false);
   const [admins, setAdmins] = useState<any[]>([]);
@@ -25,8 +26,9 @@ export default function Profile() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data: p } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
+      const { data: p } = await supabase.from("profiles").select("display_name,group_name").eq("id", user.id).maybeSingle();
       setName(p?.display_name ?? "");
+      setGroupName((p as any)?.group_name ?? "");
       const [f, h, m, r] = await Promise.all([
         supabase.from("favorites").select("*", { count: "exact", head: true }).eq("user_id", user.id),
         supabase.from("hidden_recipes").select("*", { count: "exact", head: true }).eq("user_id", user.id),
@@ -49,7 +51,8 @@ export default function Profile() {
 
   const save = async () => {
     if (!user) return;
-    const { error } = await supabase.from("profiles").update({ display_name: name.trim().slice(0, 80) }).eq("id", user.id);
+    const gn = groupName.trim().slice(0, 60);
+    const { error } = await supabase.from("profiles").update({ display_name: name.trim().slice(0, 80), group_name: gn || null }).eq("id", user.id);
     if (error) toast.error(error.message);
     else toast.success("Profil aktualisiert");
   };
@@ -81,6 +84,10 @@ export default function Profile() {
         <div>
           <Label>E-Mail</Label>
           <Input value={user?.email ?? ""} disabled className="bg-background/60" />
+        </div>
+        <div>
+          <Label>Gruppenname (Inventar &amp; Einkauf werden mit allen Personen geteilt, die exakt diesen Gruppennamen tragen)</Label>
+          <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} maxLength={60} placeholder="z. B. Haushalt Meier" className="bg-background/60" />
         </div>
         <Button onClick={save} className="bg-gold text-gold-foreground hover:bg-gold-soft">Speichern</Button>
         {isAdmin && <p className="text-sm text-gold flex items-center gap-1"><Crown className="w-4 h-4" /> Du hast Admin-Rechte</p>}

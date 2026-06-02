@@ -39,7 +39,6 @@ export default function ImperialMenu() {
     navigate("/auth");
   };
 
-  // Reihenfolge: Rezeptsammlung → Menüs → Lieblingsrezepte (per Spec)
   const items: Item[] = [
     { to: "/", icon: Home, label: "Start" },
     { to: "/recipes", icon: BookOpen, label: "Rezepte" },
@@ -55,7 +54,6 @@ export default function ImperialMenu() {
 
   const visible = items.filter((i) => !i.adminOnly || isAdmin);
 
-  // Klick auf leeren Bereich: Toggle Beschriftung
   const onEmptyClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) setExpanded((v) => !v);
   };
@@ -66,22 +64,17 @@ export default function ImperialMenu() {
       onClick={onEmptyClick}
       aria-label="Hauptnavigation"
       className={cn(
-        "fixed z-50 border-gold/40 shadow-[var(--shadow-imperial)] bg-black overflow-y-auto",
-        // Mobile: unten | Desktop: links
-        "bottom-0 left-0 right-0 border-t max-h-[40vh]",
-        "md:top-0 md:right-auto md:bottom-0 md:w-16 md:max-h-screen md:border-t-0 md:border-r",
-        expanded && "md:w-44"
+        // Immer links fixiert, vollhoch, scrollbar – nie Überlappung mit Inhalten
+        "fixed z-50 top-0 bottom-0 left-0 border-r border-gold/40 shadow-[var(--shadow-imperial)] bg-black overflow-y-auto",
+        expanded ? "w-44" : "w-14 sm:w-16"
       )}
     >
       <div
         onClick={onEmptyClick}
-        className={cn(
-          "flex md:flex-col items-center md:items-stretch gap-1 md:gap-2 p-2 md:p-3 min-h-full",
-          "flex-wrap md:flex-nowrap justify-around md:justify-start"
-        )}
+        className="flex flex-col items-stretch gap-2 p-2 sm:p-3 min-h-full"
       >
-        <div onClick={(e) => e.stopPropagation()} className="hidden md:flex items-center justify-center pb-3 mb-1 border-b border-gold/30">
-          <Crown className="w-6 h-6 text-gold" />
+        <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center pb-3 mb-1 border-b border-gold/30">
+          <Crown className="w-6 h-6 text-gold flex-shrink-0" />
           {expanded && <span className="ml-2 imperial-heading text-sm text-gold whitespace-nowrap">Imperial</span>}
         </div>
 
@@ -89,16 +82,16 @@ export default function ImperialMenu() {
           <MenuItem key={it.to} item={it} expanded={expanded} />
         ))}
 
-        <div className="hidden md:block flex-1" onClick={onEmptyClick} />
+        <div className="flex-1" onClick={onEmptyClick} />
 
         <button
           onClick={(e) => { e.stopPropagation(); handleLogout(); }}
-          className="group flex md:flex-row flex-col items-center justify-center gap-1 md:gap-3 p-2 rounded-md hover:bg-white/10 transition-colors"
+          className="group flex flex-row items-center justify-center gap-3 p-2 rounded-md hover:bg-white/10 transition-colors"
           title="Abmelden"
           aria-label="Abmelden"
         >
-          <LogOut className="w-7 h-7 md:w-6 md:h-6 text-white" />
-          {expanded && <span className="hidden md:inline text-xs text-white whitespace-normal break-words leading-tight max-w-[100px]">Abmelden</span>}
+          <LogOut className="w-6 h-6 text-white flex-shrink-0" />
+          {expanded && <span className="text-xs text-white whitespace-normal break-words leading-tight max-w-[100px]">Abmelden</span>}
         </button>
       </div>
     </nav>
@@ -114,15 +107,15 @@ function MenuItem({ item, expanded }: { item: Item; expanded: boolean }) {
       onClick={(e) => e.stopPropagation()}
       className={({ isActive }) =>
         cn(
-          "group relative flex md:flex-row flex-col items-center justify-center md:justify-start gap-1 md:gap-3 p-2 md:px-2 md:py-2 rounded-md transition-colors",
+          "group relative flex flex-row items-center justify-center gap-3 p-2 rounded-md transition-colors",
           isActive ? "bg-[#FFFF00]" : "hover:bg-white/10"
         )
       }
     >
       {({ isActive }) => (
         <>
-          <div className="relative">
-            <Icon className={cn("w-7 h-7 md:w-6 md:h-6 transition-colors", isActive ? "text-black" : "text-white")} />
+          <div className="relative flex-shrink-0">
+            <Icon className={cn("w-6 h-6 transition-colors", isActive ? "text-black" : "text-white")} />
             {item.badge && item.badge > 0 ? (
               <span className="absolute -top-1.5 -right-2 flex items-center gap-0.5 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full px-1.5 min-w-[18px] h-[18px] justify-center">
                 <Star className="w-2.5 h-2.5 fill-current" />
@@ -131,7 +124,7 @@ function MenuItem({ item, expanded }: { item: Item; expanded: boolean }) {
             ) : null}
           </div>
           {expanded && (
-            <span className={cn("hidden md:inline text-xs whitespace-normal break-words leading-[1.2] max-w-[100px] font-medium", isActive ? "text-black" : "text-white")}>
+            <span className={cn("text-xs whitespace-normal break-words leading-[1.2] max-w-[100px] font-medium", isActive ? "text-black" : "text-white")}>
               {item.label}
             </span>
           )}

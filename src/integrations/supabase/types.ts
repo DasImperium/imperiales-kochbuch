@@ -406,6 +406,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           email: string | null
+          group_name: string | null
           id: string
         }
         Insert: {
@@ -413,6 +414,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           email?: string | null
+          group_name?: string | null
           id: string
         }
         Update: {
@@ -420,6 +422,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           email?: string | null
+          group_name?: string | null
           id?: string
         }
         Relationships: []
@@ -600,6 +603,7 @@ export type Database = {
         Args: { _recipe_id: string; _tag: string }
         Returns: undefined
       }
+      group_member_ids: { Args: { _uid: string }; Returns: string[] }
       has_list_access: {
         Args: { _kind: string; _owner_id: string }
         Returns: boolean
@@ -617,6 +621,7 @@ export type Database = {
         Returns: undefined
       }
       role_tier: { Args: { _user_id: string }; Returns: number }
+      same_group: { Args: { _a: string; _b: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "user" | "superadmin" | "imperator"

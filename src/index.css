@@ -79,16 +79,25 @@
   }
   html, body, #root {
     height: 100%;
+    direction: ltr;
   }
   body {
     @apply bg-background text-foreground;
     font-family: 'Roboto', system-ui, sans-serif;
     font-feature-settings: "kern", "liga";
     -webkit-font-smoothing: antialiased;
+    direction: ltr;
+    unicode-bidi: normal;
   }
   h1, h2, h3, .imperial-heading {
     font-family: 'Cinzel', serif;
     letter-spacing: 0.02em;
+  }
+  .chat-message, .message-text, [class*="message"], [class*="chat"] {
+    direction: ltr !important;
+    unicode-bidi: normal !important;
+    transform: none !important;
+    writing-mode: horizontal-tb !important;
   }
 }
 
