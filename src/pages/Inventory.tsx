@@ -205,10 +205,10 @@ export default function Inventory() {
 
   const share = async () => {
     if (!user || !shareEmail.trim()) return;
-    const { data: prof } = await supabase.from("profiles").select("id").eq("email", shareEmail.trim().toLowerCase()).maybeSingle();
-    if (!prof) { toast.error("Nutzer nicht gefunden"); return; }
-    if (prof.id === user.id) { toast.error("Eigene Liste kann nicht freigegeben werden"); return; }
-    const { error } = await supabase.from("list_shares").insert({ owner_id: user.id, shared_with: prof.id, list_kind: "inventory" });
+    const { data: uid, error: lookupErr } = await supabase.rpc("find_user_id_by_email", { _email: shareEmail.trim() });
+    if (lookupErr || !uid) { toast.error("Nutzer nicht gefunden"); return; }
+    if (uid === user.id) { toast.error("Eigene Liste kann nicht freigegeben werden"); return; }
+    const { error } = await supabase.from("list_shares").insert({ owner_id: user.id, shared_with: uid, list_kind: "inventory" });
     if (error) toast.error(error.code === "23505" ? "Bereits freigegeben" : error.message);
     else { setShareEmail(""); toast.success("Freigegeben"); load(); }
   };
