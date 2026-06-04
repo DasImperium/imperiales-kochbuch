@@ -83,9 +83,6 @@ export default function Admin() {
     if (error && error.code !== "23505") toast.error(error.message);
     else { toast.success(`${TIER_LABEL[requiredTier]}-Rolle vergeben`); setGrantEmail(""); load(); }
   };
-    if (error && error.code !== "23505") toast.error(error.message);
-    else { toast.success(`${TIER_LABEL[requiredTier]}-Rolle vergeben`); setGrantEmail(""); load(); }
-  };
   const revoke = async (uid: string, role: Role) => {
     const t = ROLE_TIER[role];
     if (t > tier) { toast.error("Höhere Stufe nötig"); return; }
