@@ -77,9 +77,12 @@ export default function Admin() {
     if (!email) return;
     const requiredTier = ROLE_TIER[grantRole];
     if (requiredTier > tier) { toast.error(`Nur ${TIER_LABEL[requiredTier] ?? "höhere Stufe"} darf das vergeben`); return; }
-    const { data: prof } = await supabase.from("profiles").select("id").eq("email", email).maybeSingle();
-    if (!prof) { toast.error("Nutzer nicht gefunden"); return; }
-    const { error } = await supabase.from("user_roles").insert({ user_id: prof.id, role: grantRole });
+    const { data: uid } = await supabase.rpc("find_user_id_by_email", { _email: email });
+    if (!uid) { toast.error("Nutzer nicht gefunden"); return; }
+    const { error } = await supabase.from("user_roles").insert({ user_id: uid, role: grantRole });
+    if (error && error.code !== "23505") toast.error(error.message);
+    else { toast.success(`${TIER_LABEL[requiredTier]}-Rolle vergeben`); setGrantEmail(""); load(); }
+  };
     if (error && error.code !== "23505") toast.error(error.message);
     else { toast.success(`${TIER_LABEL[requiredTier]}-Rolle vergeben`); setGrantEmail(""); load(); }
   };
