@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Trash2, Plus, History, Save, Share2, X, ArrowDownAZ, AlertTriangle, Users } from "lucide-react";
+import { Trash2, Plus, History, Save, Share2, X, ArrowDownAZ, AlertTriangle, Users, Copy, RefreshCw, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { normalize, toBase } from "@/lib/units";
 import { HINT_PREFIX } from "@/pages/Chat";
