@@ -39,6 +39,7 @@ export default function ShoppingList() {
     const { data: snaps } = await supabase.from("list_snapshots").select("*").eq("owner_id", user.id).eq("list_kind", "shopping").order("created_at", { ascending: false }).limit(MAX_SNAPSHOTS);
     setSnapshots(snaps ?? []);
   };
+
   useEffect(() => { load(); }, [user]);
   useEffect(() => {
     if (!user) return;
@@ -78,6 +79,15 @@ export default function ShoppingList() {
 
   const allMatchingIds = (it: Item) =>
     raw.filter((r) => r.name.toLowerCase().trim() === it.name.toLowerCase().trim() && r.checked === it.checked).map((r) => r.id);
+
+  // Aktualisiert veränderte Werte für alle matchenden IDs der Gruppierung
+  const update = async (it: Item, patch: Partial<Item>) => {
+    const ids = allMatchingIds(it);
+    if (ids.length === 0) return;
+    const { error } = await supabase.from("shopping_items").update(patch).in("id", ids);
+    if (error) toast.error(error.message);
+    else load();
+  };
 
   const toggle = async (it: Item) => {
     const ids = allMatchingIds(it);
@@ -157,10 +167,48 @@ export default function ShoppingList() {
             {items.map((it) => (
               <li key={it.id} className={`flex items-center gap-2 p-2 flex-wrap ${it.checked ? "opacity-60" : ""}`}>
                 <Checkbox checked={it.checked} onCheckedChange={() => toggle(it)} />
-                <span className="w-20 text-right font-mono">{it.amount > 0 ? it.amount : ""}</span>
-                <span className="w-16 text-sm text-gray-700">{it.unit}</span>
-                <span className={`flex-1 min-w-0 break-words ${it.checked ? "line-through" : ""}`}>{it.name}</span>
-                <Button size="icon" variant="destructive" onClick={() => remove(it)}><Trash2 className="w-4 h-4" /></Button>
+                
+                {/* Menge editierbar */}
+                <Input 
+                  defaultValue={it.amount > 0 ? String(it.amount) : ""} 
+                  inputMode="decimal"
+                  placeholder="0"
+                  onBlur={(e) => {
+                    const v = parseFloat(e.target.value.replace(",", "."));
+                    if (!isNaN(v) && v !== it.amount) {
+                      const n = normalize(v, it.unit);
+                      update(it, { amount: n.amount, unit: n.unit });
+                    }
+                  }}
+                  className="w-20 text-right font-mono h-8 bg-white text-black"
+                />
+
+                {/* Einheit editierbar */}
+                <Input 
+                  defaultValue={it.unit}
+                  placeholder="Einheit"
+                  maxLength={20}
+                  onBlur={(e) => {
+                    if (e.target.value !== it.unit) {
+                      update(it, { unit: e.target.value });
+                    }
+                  }}
+                  className="w-16 text-sm h-8 bg-white text-black"
+                />
+
+                {/* Zutat / Name editierbar (Substituieren) */}
+                <Input 
+                  defaultValue={it.name}
+                  maxLength={80}
+                  onBlur={(e) => {
+                    if (e.target.value.trim() && e.target.value.trim() !== it.name) {
+                      update(it, { name: e.target.value.trim() });
+                    }
+                  }}
+                  className={`flex-1 min-w-[150px] h-8 bg-white text-black ${it.checked ? "line-through opacity-70" : ""}`}
+                />
+
+                <Button size="icon" variant="destructive" onClick={() => remove(it)} className="h-8 w-8"><Trash2 className="w-4 h-4" /></Button>
               </li>
             ))}
           </ul>
