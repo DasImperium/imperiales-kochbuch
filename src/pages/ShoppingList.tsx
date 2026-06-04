@@ -34,8 +34,8 @@ export default function ShoppingList() {
     const owners = Array.from(ids);
     setOwnerIds(owners);
 
-    // Standard-Reihenfolge ab Werk aus der DB laden
-    const { data } = await supabase.from("shopping_items").select("*").in("owner_id", owners).order("checked").order("name");
+    // KORREKTUR: .order("name") entfernt, damit die natürliche Eintragungsreihenfolge (id/created_at) erhalten bleibt
+    const { data } = await supabase.from("shopping_items").select("*").in("owner_id", owners).order("checked");
     setRaw((data ?? []) as Item[]);
     const { data: snaps } = await supabase.from("list_snapshots").select("*").eq("owner_id", user.id).eq("list_kind", "shopping").order("created_at", { ascending: false }).limit(MAX_SNAPSHOTS);
     setSnapshots(snaps ?? []);
@@ -67,7 +67,7 @@ export default function ShoppingList() {
     }
     let arr = Array.from(groups.values());
     
-    // Sortierung umschalten anhand des Buttons
+    // Greift jetzt korrekt, da die Rohdaten nicht mehr vorab alphabetisch erzwungen sind
     if (sortAlpha) {
       arr.sort((a, b) => a.name.localeCompare(b.name, "de"));
     }
@@ -159,7 +159,6 @@ export default function ShoppingList() {
         </div>
       </Card>
 
-      {/* Synchronisierter Sortier-Button analog zum Inventar */}
       <div className="flex items-center justify-end mb-2">
         <Button variant="outline" size="sm" onClick={() => setSortAlpha((v) => !v)}>
           <ArrowDownAZ className="w-4 h-4 mr-1" />{sortAlpha ? "Standard-Sortierung" : "Alphabetisch ordnen"}
