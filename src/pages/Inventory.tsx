@@ -46,17 +46,21 @@ export default function Inventory() {
 
   const load = async () => {
     if (!user) return;
-    // Eigene Gruppe
+    
     const { data: me } = await supabase.from("profiles").select("group_id").eq("id", user.id).maybeSingle();
     const gid = (me as any)?.group_id as string | null;
 
     const ownerIds = new Set<string>([user.id]);
+    const currentMates: Profile[] = [];
+    
     if (gid) {
       const { data: g } = await supabase.from("groups").select("*").eq("id", gid).maybeSingle();
       setGroup((g as any) ?? null);
       const { data: mates } = await supabase.from("profiles").select("id,display_name,group_id").eq("group_id", gid);
-      (mates ?? []).forEach((m: any) => ownerIds.add(m.id));
-      setGroupMembers((mates ?? []) as Profile[]);
+      const fetchedMates = (mates ?? []) as Profile[];
+      fetchedMates.forEach((m) => ownerIds.add(m.id));
+      setGroupMembers(fetchedMates);
+      currentMates.push(...fetchedMates);
     } else {
       setGroup(null); setGroupMembers([]);
     }
@@ -77,8 +81,10 @@ export default function Inventory() {
     const { data: snaps } = await supabase.from("list_snapshots").select("*").eq("owner_id", user.id).eq("list_kind", "inventory").order("created_at", { ascending: false }).limit(MAX_SNAPSHOTS);
     setSnapshots(snaps ?? []);
 
-    checkAndNotify(list.filter((i) => i.owner_id === user.id));
+    // Benachrichtigungen prüfen (Für eigene Items oder Gruppen-Items)
+    checkAndNotify(list.filter((i) => i.owner_id === user.id || currentMates.some(m => m.id === i.owner_id)), currentMates);
   };
+
   useEffect(() => { load(); }, [user]);
 
   useEffect(() => {
@@ -124,35 +130,47 @@ export default function Inventory() {
     toast.success("Code kopiert");
   };
 
-
-  const checkAndNotify = async (mine: Item[]) => {
+  const checkAndNotify = async (mine: Item[], mates: Profile[]) => {
     if (!user) return;
     const newWarn = new Set(warnedIds);
+    
+    // Empfänger-Liste definieren (Entweder die ganze Gruppe oder nur ich selbst)
+    const recipients = mates.length > 0 ? mates.map(m => m.id) : [user.id];
+
     for (const it of mine) {
       const l = level(it);
       const key = `${it.id}:${l}`;
       if (l === 0 || newWarn.has(key)) continue;
       newWarn.add(key);
+
       if (l === 2) {
         const minAmount = Number(it.min_stock || 0);
         if (minAmount > 0) {
           const { data: existing } = await supabase.from("shopping_items").select("id,amount")
-            .eq("owner_id", user.id).ilike("name", it.name).eq("unit", it.unit).eq("checked", false).maybeSingle();
+            .eq("owner_id", it.owner_id).ilike("name", it.name).eq("unit", it.unit).eq("checked", false).maybeSingle();
           if (!existing) {
             await supabase.from("shopping_items").insert({
-              owner_id: user.id, name: it.name, amount: minAmount, unit: it.unit,
+              owner_id: it.owner_id, name: it.name, amount: minAmount, unit: it.unit,
             });
           }
         }
-        await supabase.from("chat_messages").insert({
-          sender_id: user.id, recipient_id: user.id,
-          content: `${HINT_PREFIX}Achtung: Mindestbestand für ${it.name} unterschritten – ${it.min_stock} ${it.unit} der Einkaufsliste hinzugefügt.`,
-        });
+
+        // Nachricht an alle Betroffenen in den "Hinweise"-Kanal schicken
+        for (const rcptId of recipients) {
+          await supabase.from("chat_messages").insert({
+            sender_id: user.id, 
+            recipient_id: rcptId,
+            content: `${HINT_PREFIX}Achtung: Mindestbestand für ${it.name} unterschritten – ${it.min_stock} ${it.unit} der Einkaufsliste hinzugefügt.`,
+          });
+        }
       } else if (l === 1) {
-        await supabase.from("chat_messages").insert({
-          sender_id: user.id, recipient_id: user.id,
-          content: `${HINT_PREFIX}Warnung: Sicherheitsbestand für ${it.name} (${it.amount} ${it.unit}) unterschritten.`,
-        });
+        for (const rcptId of recipients) {
+          await supabase.from("chat_messages").insert({
+            sender_id: user.id, 
+            recipient_id: rcptId,
+            content: `${HINT_PREFIX}Warnung: Sicherheitsbestand für ${it.name} (${it.amount} ${it.unit}) unterschritten.`,
+          });
+        }
       }
     }
     setWarnedIds(newWarn);
@@ -220,7 +238,6 @@ export default function Inventory() {
     <div className="container mx-auto px-4 py-8 max-w-5xl">
       <h1 className="imperial-heading text-3xl text-gold mb-4 break-words">Inventar</h1>
 
-      {/* Gruppensynchronisation per Beitrittscode */}
       <Card className="bg-white text-black border-gold/30 p-4 mb-4">
         <h3 className="font-bold text-[#006400] mb-2 flex items-center gap-2"><Users className="w-4 h-4" />Gruppe (Echtzeit-Sync)</h3>
         {group ? (
@@ -261,7 +278,6 @@ export default function Inventory() {
         )}
       </Card>
 
-
       <Card className="bg-white text-black border-gold/30 p-4 mb-4">
         <div className="text-xs font-bold text-[#006400] mb-2">Neu: Menge | Einheit | Zutat | Sicherheitsbestand | Mindestbestand</div>
         <div className="grid grid-cols-2 md:grid-cols-[100px_100px_1fr_120px_120px_auto] gap-2 items-end">
@@ -286,11 +302,9 @@ export default function Inventory() {
         </Button>
       </div>
 
-      {/* Desktop: Tabelle. Mobil: Cards (volle Sichtbarkeit, deutliche Trennung) */}
       <Card className="bg-white text-black border-gold/30 p-0 mb-4 overflow-x-auto">
         {sortedItems.length === 0 ? <p className="text-sm text-content-fg/60 p-3">Noch keine Einträge.</p> : (
           <>
-            {/* Desktop / Tablet */}
             <table className="w-full text-sm hidden md:table">
               <thead className="bg-gray-100 text-[#006400]">
                 <tr>
@@ -303,7 +317,7 @@ export default function Inventory() {
               <tbody>
                 {sortedItems.map((it) => {
                   const l = level(it);
-                  const own = it.owner_id === user?.id;
+                  const own = it.owner_id === user?.id || groupMembers.some(m => m.id === it.owner_id);
                   return (
                     <tr key={it.id} className={`border-t ${rowClass(l)}`}>
                       <td className="p-1 w-24"><Input defaultValue={String(it.amount)} inputMode="decimal" disabled={!own} onBlur={(e) => {
@@ -329,11 +343,10 @@ export default function Inventory() {
               </tbody>
             </table>
 
-            {/* Mobile: vollständige Karte je Zutat */}
             <ul className="md:hidden divide-y divide-gray-300">
               {sortedItems.map((it, idx) => {
                 const l = level(it);
-                const own = it.owner_id === user?.id;
+                const own = it.owner_id === user?.id || groupMembers.some(m => m.id === it.owner_id);
                 return (
                   <li key={it.id} className={`p-3 ${rowClass(l)} ${idx % 2 === 1 && l === 0 ? "bg-gray-50" : ""}`}>
                     <div className="flex items-start justify-between gap-2 mb-2">
