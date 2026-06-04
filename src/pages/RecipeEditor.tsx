@@ -51,7 +51,7 @@ export default function RecipeEditor() {
     supabase.from("categories").select("*").order("is_root", { ascending: false }).order("name")
       .then(({ data }) => setCategories((data ?? []) as CategoryRow[]));
     if (isAdmin) {
-      supabase.from("profiles").select("id,display_name,email").order("display_name")
+      supabase.from("profiles").select("id,display_name").order("display_name")
         .then(({ data }) => setProfiles((data ?? []) as Profile[]));
     }
     if (id) {
