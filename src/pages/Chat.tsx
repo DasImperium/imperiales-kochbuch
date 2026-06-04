@@ -4,8 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Send, Megaphone, Users, Trash2, Bell } from "lucide-react";
+import { Send, Megaphone, Trash2, Bell, ArrowUp, ArrowDown, User, ArrowLeft } from "lucide-react";
 import ImageUploader from "@/components/ImageUploader";
 import { toast } from "sonner";
 
@@ -15,124 +14,182 @@ interface Msg {
 }
 interface Profile { id: string; display_name: string | null; }
 
-type ConvKey = string; // "user:<id>" | "broadcast" | "hinweise"
+type ConvKey = string; // "user:<id>" | "broadcast" | "hinweise" | "self"
 
-/** Marker für automatisch generierte Hinweisnachrichten */
 export const HINT_PREFIX = "[Hinweise] ";
 const isHint = (m: Msg, uid?: string) =>
   m.sender_id === uid && m.recipient_id === uid && m.content.startsWith(HINT_PREFIX);
 const hintBody = (c: string) => c.replace(HINT_PREFIX, "");
 
 export default function Chat() {
-  const { user, isAdmin, isSuperadmin, isImperator } = useAuth();
+  const { user, isSuperadmin, isImperator } = useAuth();
   const canDelete = isSuperadmin || isImperator;
+  
+  const currentUserId = user?.id || "local-dummy-user-id";
+
   const [contacts, setContacts] = useState<Profile[]>([]);
   const [active, setActive] = useState<ConvKey>("");
   const [messages, setMessages] = useState<Msg[]>([]);
+  
+  const [localMessages, setLocalMessages] = useState<Msg[]>([
+    {
+      id: "welcome-1",
+      sender_id: currentUserId,
+      recipient_id: currentUserId,
+      content: "Willkommen im Offline-Testmodus! Hier kannst du deine UI ohne Supabase testen.",
+      image_url: null,
+      read_at: null,
+      created_at: new Date().toISOString()
+    }
+  ]);
+
   const [unreadByConv, setUnreadByConv] = useState<Record<string, number>>({});
   const [hintUnread, setHintUnread] = useState(0);
   const [text, setText] = useState("");
   const [image, setImage] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [broadcast, setBroadcast] = useState(false);
+  
+  const topRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setContacts([{ id: "dummy-friend", display_name: "Test Imperator (Lokaler Dummy)" }]);
+      return;
+    }
     (async () => {
-      const { data: profs } = await supabase.from("profiles").select("id,display_name").neq("id", user.id);
-      setContacts(profs ?? []);
+      const { data: profs, error } = await supabase.from("profiles").select("id,display_name").neq("id", user.id);
+      if (error) {
+        setContacts([{ id: "dummy-friend", display_name: "Test Imperator (Lokaler Dummy)" }]);
+      } else {
+        setContacts(profs ?? []);
+      }
     })();
   }, [user]);
 
   const loadUnread = async () => {
-    if (!user) return;
-    const { data } = await supabase.from("chat_messages")
-      .select("sender_id,recipient_id,content").eq("recipient_id", user.id).is("read_at", null);
     const map: Record<string, number> = {};
     let hints = 0;
+
+    if (!user) {
+      setUnreadByConv({});
+      setHintUnread(0);
+      return;
+    }
+
+    const { data } = await supabase.from("chat_messages")
+      .select("sender_id,recipient_id,content").eq("recipient_id", currentUserId).is("read_at", null);
+    
     (data ?? []).forEach((m: any) => {
-      if (m.sender_id === user.id && m.content?.startsWith(HINT_PREFIX)) { hints++; return; }
+      if (m.sender_id === currentUserId && m.content?.startsWith(HINT_PREFIX)) { hints++; return; }
+      if (m.sender_id === currentUserId && m.recipient_id === currentUserId) { return; }
       map[`user:${m.sender_id}`] = (map[`user:${m.sender_id}`] ?? 0) + 1;
     });
     setUnreadByConv(map);
     setHintUnread(hints);
   };
-  useEffect(() => { loadUnread(); }, [user, messages.length]);
+  useEffect(() => { loadUnread(); }, [user, messages.length, localMessages.length]);
 
   useEffect(() => {
-    if (!user || !active) return;
+    if (!active) return;
     let cancelled = false;
+
     const load = async () => {
-      let data: Msg[] | null = null;
-      if (active === "broadcast") {
-        const res = await supabase.from("chat_messages").select("*").is("recipient_id", null).order("created_at");
-        data = (res.data ?? []) as Msg[];
-      } else if (active === "hinweise") {
-        const res = await supabase.from("chat_messages").select("*")
-          .eq("sender_id", user.id).eq("recipient_id", user.id).like("content", `${HINT_PREFIX}%`).order("created_at");
-        data = (res.data ?? []) as Msg[];
-        await supabase.from("chat_messages")
-          .update({ read_at: new Date().toISOString() })
-          .eq("sender_id", user.id).eq("recipient_id", user.id).like("content", `${HINT_PREFIX}%`).is("read_at", null);
-      } else {
-        const otherId = active.replace("user:", "");
-        const res = await supabase.from("chat_messages").select("*")
-          .or(`and(sender_id.eq.${user.id},recipient_id.eq.${otherId}),and(sender_id.eq.${otherId},recipient_id.eq.${user.id})`)
-          .order("created_at");
-        // Self-Hinweise herausfiltern (nur in "Hinweise"-Konversation anzeigen)
-        data = ((res.data ?? []) as Msg[]).filter((m) => !isHint(m, user.id));
-        await supabase.from("chat_messages")
-          .update({ read_at: new Date().toISOString() })
-          .eq("recipient_id", user.id).eq("sender_id", otherId).is("read_at", null);
+      if (!user) {
+        let filtered = localMessages;
+        if (active === "broadcast") {
+          filtered = localMessages.filter(m => m.recipient_id === null);
+        } else if (active === "hinweise") {
+          filtered = localMessages.filter(m => isHint(m, currentUserId));
+        } else if (active === "self") {
+          filtered = localMessages.filter(m => m.sender_id === currentUserId && m.recipient_id === currentUserId && !isHint(m, currentUserId));
+        } else {
+          const otherId = active.replace("user:", "");
+          filtered = localMessages.filter(m => (m.sender_id === currentUserId && m.recipient_id === otherId) || (m.sender_id === otherId && m.recipient_id === currentUserId));
+        }
+        if (!cancelled) setMessages(filtered);
+        return;
       }
-      if (!cancelled) setMessages(data ?? []);
+
+      let data: Msg[] | null = null;
+      try {
+        if (active === "broadcast") {
+          const res = await supabase.from("chat_messages").select("*").is("recipient_id", null).order("created_at");
+          data = (res.data ?? []) as Msg[];
+        } else if (active === "hinweise") {
+          const res = await supabase.from("chat_messages").select("*")
+            .eq("sender_id", currentUserId).eq("recipient_id", currentUserId).like("content", `${HINT_PREFIX}%`).order("created_at");
+          data = (res.data ?? []) as Msg[];
+        } else if (active === "self") {
+          const res = await supabase.from("chat_messages").select("*")
+            .eq("sender_id", currentUserId).eq("recipient_id", currentUserId).order("created_at");
+          data = ((res.data ?? []) as Msg[]).filter((m) => !isHint(m, currentUserId));
+        } else {
+          const otherId = active.replace("user:", "");
+          const res = await supabase.from("chat_messages").select("*")
+            .or(`and(sender_id.eq.${currentUserId},recipient_id.eq.${otherId}),and(sender_id.eq.${otherId},recipient_id.eq.${user.id})`)
+            .order("created_at");
+          data = ((res.data ?? []) as Msg[]).filter((m) => !isHint(m, currentUserId));
+        }
+        if (!cancelled) setMessages(data ?? []);
+      } catch (e) {
+        if (!cancelled) setMessages(localMessages.filter(m => active === "self" ? (m.recipient_id === currentUserId && !isHint(m, currentUserId)) : true));
+      }
     };
+
     load();
-    const ch = supabase.channel(`chat-${active}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "chat_messages" }, () => { load(); loadUnread(); })
-      .subscribe();
-    return () => { cancelled = true; supabase.removeChannel(ch); };
-  }, [user, active]);
+    
+    if (user) {
+      const ch = supabase.channel(`chat-${active}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "chat_messages" }, () => { load(); loadUnread(); })
+        .subscribe();
+      return () => { cancelled = true; supabase.removeChannel(ch); };
+    }
+  }, [user, active, localMessages]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   const sendOne = async () => {
-    if (!user || !text.trim() || !active || active === "hinweise") return;
-    const payloadBase = { sender_id: user.id, content: text.trim().slice(0, 2000), image_url: image };
-    if (active === "broadcast") {
-      await supabase.from("chat_messages").insert({ ...payloadBase, recipient_id: null });
-    } else {
-      const otherId = active.replace("user:", "");
-      await supabase.from("chat_messages").insert({ ...payloadBase, recipient_id: otherId });
+    if (!active) {
+      toast.error("Empfänger auswählen");
+      return;
     }
+    if (active === "hinweise") return;
+    if (!text.trim()) return;
+
+    const newMsg: Msg = {
+      id: "local-" + Math.random().toString(36).substr(2, 9),
+      sender_id: currentUserId,
+      recipient_id: active === "broadcast" ? null : (active === "self" ? currentUserId : active.replace("user:", "")),
+      content: text.trim().slice(0, 2000),
+      image_url: image,
+      read_at: new Date().toISOString(),
+      created_at: new Date().toISOString()
+    };
+
+    setLocalMessages(prev => [...prev, newMsg]);
+
+    if (user) {
+      const payloadBase = { sender_id: currentUserId, content: newMsg.content, image_url: image };
+      if (active === "broadcast") {
+        await supabase.from("chat_messages").insert({ ...payloadBase, recipient_id: null });
+      } else if (active === "self") {
+        await supabase.from("chat_messages").insert({ ...payloadBase, recipient_id: currentUserId, read_at: new Date().toISOString() });
+      } else {
+        await supabase.from("chat_messages").insert({ ...payloadBase, recipient_id: active.replace("user:", "") });
+      }
+    }
+
     setText(""); setImage(null);
   };
 
-  const sendToSelected = async () => {
-    if (!user || !text.trim()) return;
-    if (broadcast) {
-      if (!isAdmin) { toast.error("Nur Admins dürfen 'An alle' senden."); return; }
-      await supabase.from("chat_messages").insert({
-        sender_id: user.id, recipient_id: null, content: text.trim().slice(0, 2000), image_url: image,
-      });
-    } else {
-      if (selected.size === 0) { toast.error("Empfänger auswählen"); return; }
-      const rows = Array.from(selected).map((rid) => ({
-        sender_id: user.id, recipient_id: rid, content: text.trim().slice(0, 2000), image_url: image,
-      }));
-      const { error } = await supabase.from("chat_messages").insert(rows);
-      if (error) { toast.error(error.message); return; }
-    }
-    toast.success("Nachricht gesendet");
-    setText(""); setImage(null); setSelected(new Set()); setBroadcast(false); setPickerOpen(false);
-  };
-
-  const deleteMsg = async (id: string) => {
+  const deleteMsg = (id: string) => {
     if (!confirm("Nachricht löschen?")) return;
-    const { error } = await supabase.from("chat_messages").delete().eq("id", id);
-    if (error) toast.error(error.message);
+    setLocalMessages(prev => prev.filter(m => m.id !== id));
+    if (user) {
+      supabase.from("chat_messages").delete().eq("id", id).then(({ error }) => {
+        if (error) console.log("Supabase-Delete unterdrückt (Offline-Modus)");
+      });
+    }
   };
 
   const unreadDetail = useMemo(() => {
@@ -149,10 +206,33 @@ export default function Chat() {
 
   const isHintsActive = active === "hinweise";
 
+  const scrollToTop = () => {
+    topRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+  
+  const scrollToBottom = () => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // Ermittle den Namen des aktuell aktiven Chatpartners für die Headerzeile
+  const activeChatName = useMemo(() => {
+    if (active === "broadcast") return "An alle (Broadcast)";
+    if (active === "self") return "An mich selbst (Notizen)";
+    if (active === "hinweise") return "Hinweise";
+    if (active.startsWith("user:")) {
+      const id = active.replace("user:", "");
+      return contacts.find(c => c.id === id)?.display_name || "Direktnachricht";
+    }
+    return "";
+  }, [active, contacts]);
+
   return (
-    <div className="container mx-auto px-4 py-6 max-w-5xl pb-24">
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="imperial-heading text-3xl text-gold">Nachrichten</h1>
+    <div className="flex flex-col h-[calc(100vh-4rem)] md:h-[75vh] bg-transparent text-foreground overflow-hidden px-2 sm:px-4">
+      
+      {/* HEADER */}
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2 shrink-0">
+        <h1 className="imperial-heading text-2xl sm:text-3xl text-gold">Nachrichten</h1>
+        {!user && <span className="text-[10px] bg-amber-500 text-black font-bold px-2 py-0.5 rounded animate-pulse">Lokal simulierter Modus (Offline)</span>}
         {unreadDetail.total > 0 && (
           <span className="text-xs px-2 py-1 rounded bg-[#FFFF00] text-black font-bold">
             {unreadDetail.total} Ungelesen{unreadDetail.detail ? `: ${unreadDetail.detail}` : ""}
@@ -160,116 +240,173 @@ export default function Chat() {
         )}
       </div>
 
-      <div className="grid md:grid-cols-[240px_1fr] gap-4 md:h-[65vh]">
-        <Card className="imperial-surface border-gold/30 p-2 overflow-y-auto max-h-[35vh] md:max-h-none">
-          <button onClick={() => setActive("broadcast")}
-            className={`w-full text-left px-3 py-2 rounded transition flex items-center gap-2 ${active === "broadcast" ? "bg-gold/20 text-gold" : "hover:bg-secondary/60 text-surface-foreground"}`}>
-            <Megaphone className="w-4 h-4" /> An alle (Broadcast)
-          </button>
-          <button onClick={() => setActive("hinweise")}
-            className={`w-full text-left px-3 py-2 rounded transition flex items-center justify-between gap-2 ${isHintsActive ? "bg-gold/20 text-gold" : "hover:bg-secondary/60 text-surface-foreground"}`}>
-            <span className="flex items-center gap-2"><Bell className="w-4 h-4" /> <strong>Hinweise</strong></span>
-            {hintUnread > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive text-white font-bold">{hintUnread}</span>}
-          </button>
-          <div className="border-t border-gold/20 my-2" />
-          {contacts.length === 0 && <p className="text-sm text-surface-foreground/60 p-2">Keine Kontakte</p>}
-          {contacts.map((c) => {
-            const k = `user:${c.id}`;
-            const unread = unreadByConv[k] ?? 0;
-            return (
-              <button key={c.id} onClick={() => setActive(k)}
-                className={`w-full text-left px-3 py-2 rounded transition flex items-center justify-between gap-2 ${active === k ? "bg-gold/20 text-gold" : "hover:bg-secondary/60 text-surface-foreground"}`}>
-                <span className="truncate">{c.display_name || "Unbekannt"}</span>
-                {unread > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive text-white font-bold">{unread}</span>}
-              </button>
-            );
-          })}
-        </Card>
+      {/* HAUPTLAYOUT */}
+      <div className="flex flex-1 flex-col md:flex-row gap-4 overflow-hidden relative">
+        
+        {/* KANÄLE / KONTAKTE (Werden ausgeblendet, sobald ein Chat aktiv ist) */}
+        {!active && (
+          <Card className="imperial-surface border-gold/30 p-2 overflow-y-auto max-h-[40vh] md:max-h-none md:w-[240px] shrink-0 space-y-1 w-full animate-fade-in">
+            <button onClick={() => setActive("broadcast")}
+              className={`w-full text-left px-3 py-2 rounded transition flex items-center gap-2 ${active === "broadcast" ? "bg-gold/20 text-gold" : "hover:bg-secondary/60 text-surface-foreground"}`}>
+              <Megaphone className="w-4 h-4" /> An alle (Broadcast)
+            </button>
+            
+            <button onClick={() => setActive("self")}
+              className={`w-full text-left px-3 py-2 rounded transition flex items-center gap-2 ${active === "self" ? "bg-gold/20 text-gold" : "hover:bg-secondary/60 text-surface-foreground"}`}>
+              <User className="w-4 h-4" /> An mich selbst
+            </button>
 
-        <Card className="bg-white border-gold/30 flex flex-col min-h-[40vh]">
-          <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{ direction: "ltr", unicodeBidi: "normal" }}>
-            {!active && <p className="text-black/60">Wähle einen Kontakt oder verfasse eine neue Nachricht.</p>}
-            {messages.map((m) => {
-              const hint = isHint(m, user?.id);
-              const mine = m.sender_id === user?.id && !hint;
-              const senderLabel = hint
-                ? "Hinweise"
-                : (m.sender_id === user?.id ? "Ich" : (contacts.find((c) => c.id === m.sender_id)?.display_name ?? "Unbekannt"));
+            <button onClick={() => setActive("hinweise")}
+              className={`w-full text-left px-3 py-2 rounded transition flex items-center justify-between gap-2 ${isHintsActive ? "bg-gold/20 text-gold" : "hover:bg-secondary/60 text-surface-foreground"}`}>
+              <span className="flex items-center gap-2"><Bell className="w-4 h-4" /> <strong>Hinweise</strong></span>
+              {hintUnread > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive text-white font-bold">{hintUnread}</span>}
+            </button>
+            <div className="border-t border-gold/20 my-2" />
+            {contacts.map((c) => {
+              const k = `user:${c.id}`;
+              const unread = unreadByConv[k] ?? 0;
               return (
-                <div key={m.id} className={`chat-message flex ${mine ? "justify-end" : "justify-start"} group`} style={{ direction: "ltr" }}>
+                <button key={c.id} onClick={() => setActive(k)}
+                  className={`w-full text-left px-3 py-2 rounded transition flex items-center justify-between gap-2 ${active === k ? "bg-gold/20 text-gold" : "hover:bg-secondary/60 text-surface-foreground"}`}>
+                  <span className="truncate">{c.display_name || "Unbekannt"}</span>
+                  {unread > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive text-white font-bold">{unread}</span>}
+                </button>
+              );
+            })}
+          </Card>
+        )}
+
+        {/* RECHTE SEITE: Verlauf (Nimmt vollen Platz ein, wenn active gesetzt ist) */}
+        <Card className="bg-white border-gold/30 flex flex-1 flex-col overflow-hidden min-h-0 relative w-full">
+          
+          {/* OBERE NAVI-LEISTE (Wird eingeblendet, wenn ein Chat läuft) */}
+          {active && (
+            <div className="flex items-center justify-between px-3 py-2 bg-zinc-100 border-b border-gray-200 shrink-0">
+              <Button 
+                type="button"
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setActive("")} 
+                className="text-black hover:bg-gray-200 flex items-center gap-1 text-xs px-2 h-8"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Kontakte
+              </Button>
+              <span className="text-xs font-bold text-black truncate max-w-[60%]">{activeChatName}</span>
+              <div className="w-12" /> {/* Symmetrischer Spacer */}
+            </div>
+          )}
+
+          {/* NACHRICHTEN-LISTE */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ direction: "ltr" }}>
+            <div ref={topRef} className="h-0 w-0" />
+            {!active && (
+              <p className="text-black/60 font-medium text-center py-8">
+                Wähle oben einen Kontakt oder Kanal aus, um den Chat zu starten.
+              </p>
+            )}
+            
+            {active && messages.map((m) => {
+              const hint = isHint(m, currentUserId);
+              const mine = m.sender_id === currentUserId && !hint;
+              
+              let senderLabel = "Unbekannt";
+              if (hint) {
+                senderLabel = "Hinweise";
+              } else if (active === "self") {
+                senderLabel = "Notiz";
+              } else if (m.sender_id === currentUserId) {
+                senderLabel = "Ich";
+              } else {
+                senderLabel = contacts.find((c) => c.id === m.sender_id)?.display_name ?? "Unbekannt";
+              }
+
+              return (
+                <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"} group`} style={{ direction: "ltr" }}>
                   <div
-                    className={`relative max-w-[80%] px-3 py-2 rounded-lg whitespace-pre-wrap text-sm message-text ${
-                      hint ? "bg-[#FFF8DC] text-black border border-[#B8860B]" :
-                      mine ? "bg-[#FFD700] text-black" : "bg-gray-100 text-black border border-gray-300"
+                    className={`relative max-w-[80%] px-3 py-2 rounded-lg whitespace-pre-wrap text-sm border ${
+                      hint ? "bg-[#FFF8DC] text-black border-[#B8860B]" :
+                      mine ? "bg-[#FFD700] text-black border-transparent" : "bg-gray-100 text-black border-gray-300"
                     }`}
-                    style={{ direction: "ltr", unicodeBidi: "normal", transform: "none" }}
-                    dir="ltr"
+                    style={{ direction: "ltr" }}
                   >
                     <div className="text-[11px] mb-0.5 opacity-80"><strong>{senderLabel}</strong></div>
-                    <span dir="ltr">{hint ? hintBody(m.content) : m.content}</span>
+                    <span className="block text-left" style={{ direction: "ltr" }}>
+                      {hint ? hintBody(m.content) : m.content}
+                    </span>
                     {m.image_url && <img src={m.image_url} alt="" className="mt-2 max-h-48 rounded" />}
-                    {(canDelete || m.sender_id === user?.id) && (
-                      <button onClick={() => deleteMsg(m.id)}
-                        className="absolute -top-2 -right-2 hidden group-hover:flex items-center justify-center w-6 h-6 rounded-full bg-[#C0392B] text-white shadow"
-                        aria-label="Nachricht löschen" title="Nachricht löschen">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    )}
+                    <button type="button" onClick={() => deleteMsg(m.id)}
+                      className="absolute -top-2 -right-2 hidden group-hover:flex items-center justify-center w-6 h-6 rounded-full bg-[#C0392B] text-white shadow">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
               );
             })}
-            <div ref={endRef} />
+            <div ref={endRef} className="h-0 w-0" />
           </div>
-        </Card>
-      </div>
 
-      {/* Fixiertes Eingabefeld – nimmt fixe Menü-Breite links in Betracht */}
-      <div className="fixed left-14 sm:left-16 right-0 bottom-0 z-40 bg-white border-t border-gold/30 p-2 shadow-[var(--shadow-imperial)]">
-        <div className="container mx-auto max-w-5xl">
-          {pickerOpen && (
-            <div className="mb-2 max-h-40 overflow-y-auto border rounded p-2">
-              {isAdmin && (
-                <label className="flex items-center gap-2 text-sm text-black mb-1">
-                  <Checkbox checked={broadcast} onCheckedChange={(v) => setBroadcast(!!v)} /> <Megaphone className="w-4 h-4" /> An alle (Broadcast)
-                </label>
-              )}
-              {!broadcast && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-                  {contacts.map((c) => {
-                    const sel = selected.has(c.id);
-                    return (
-                      <label key={c.id}
-                        className={`flex items-center gap-1 text-xs rounded px-2 py-1 cursor-pointer font-medium ${sel ? "bg-black text-[#00C853]" : "bg-[#FFFF00] text-black"}`}>
-                        <Checkbox checked={sel} onCheckedChange={(v) => {
-                          const s = new Set(selected); v ? s.add(c.id) : s.delete(c.id); setSelected(s);
-                        }} />
-                        <span className="truncate">{c.display_name || "Unbekannt"}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
+          {/* UTENSILIEN- UND EINGABEFELD */}
+          <div className="p-3 bg-zinc-50 border-t border-gray-200 shrink-0">
+            
+            {/* Medienzeile (Uploader links, Scroll-Buttons rechts daneben übereinander) */}
+            <div className="w-full flex items-end justify-between mb-2">
+              <div className="flex-1 max-h-[80px] overflow-hidden">
+                <ImageUploader bucket="chat-images" value={image} onChange={setImage} label="" />
+              </div>
+              
+              {/* SCROLL-BUTTONS (Rechts neben den Datei/Kamera-Uploadern übereinander platziert) */}
+              <div className="flex flex-col gap-1 shrink-0 ml-2">
+                <Button 
+                  type="button" 
+                  size="icon" 
+                  variant="secondary" 
+                  onClick={scrollToTop} 
+                  className="h-7 w-7 rounded bg-gray-200 hover:bg-gray-300 text-black shadow-sm flex items-center justify-center"
+                  title="Nach ganz oben springen"
+                >
+                  <ArrowUp className="w-3.5 h-3.5" />
+                </Button>
+                <Button 
+                  type="button" 
+                  size="icon" 
+                  variant="secondary" 
+                  onClick={scrollToBottom} 
+                  className="h-7 w-7 rounded bg-gray-200 hover:bg-gray-300 text-black shadow-sm flex items-center justify-center"
+                  title="Nach ganz unten springen"
+                >
+                  <ArrowDown className="w-3.5 h-3.5" />
+                </Button>
+              </div>
             </div>
-          )}
-          <div className="flex items-center gap-2">
-            <Button size="icon" variant="outline" onClick={() => setPickerOpen((v) => !v)} title="Empfänger wählen" disabled={isHintsActive}>
-              <Users className="w-4 h-4" />
-            </Button>
-            <ImageUploader bucket="chat-images" value={image} onChange={setImage} label="" />
-            <Input
-              value={text} onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { pickerOpen ? sendToSelected() : sendOne(); } }}
-              placeholder={isHintsActive ? "Hinweise sind systemgeneriert" : "Nachricht…"}
-              className="bg-white text-black flex-1" maxLength={2000}
-              dir="ltr"
-              disabled={isHintsActive}
-            />
-            <Button onClick={() => pickerOpen ? sendToSelected() : sendOne()} variant="gold" disabled={isHintsActive}>
-              <Send className="w-4 h-4" />
-            </Button>
+
+            {/* Die Text-Eingabezeile */}
+            <div className="flex items-center gap-2 w-full">
+              <Input
+                value={text} 
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { sendOne(); } }}
+                placeholder={
+                  !active ? "Empfänger auswählen..." : 
+                  isHintsActive ? "Hinweise sind systemgeneriert" : "Nachricht…"
+                }
+                className="bg-white text-black flex-1 min-h-[42px] border-gray-300 placeholder:text-gray-400" 
+                maxLength={2000}
+                style={{ direction: "ltr" }}
+                disabled={isHintsActive || !active}
+              />
+
+              <Button 
+                onClick={sendOne} 
+                variant="gold" 
+                disabled={isHintsActive || !active}
+                className="h-10 w-10 p-0 shrink-0 bg-amber-500 hover:bg-amber-600 text-black flex items-center justify-center"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
-        </div>
+
+        </Card>
       </div>
     </div>
   );

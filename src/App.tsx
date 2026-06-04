@@ -1,3 +1,5 @@
+// src/App.tsx
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -32,35 +34,43 @@ const Protected = ({ children }: { children: React.ReactNode }) => (
   </ProtectedRoute>
 );
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/" element={<Protected><Home /></Protected>} />
-          <Route path="/recipes" element={<Protected><Recipes /></Protected>} />
-          <Route path="/recipes/new" element={<Protected><RecipeEditor /></Protected>} />
-          <Route path="/recipes/:id" element={<Protected><RecipeDetail /></Protected>} />
-          <Route path="/recipes/:id/edit" element={<Protected><RecipeEditor /></Protected>} />
-          <Route path="/favorites" element={<Protected><Favorites /></Protected>} />
-          <Route path="/chat" element={<Protected><Chat /></Protected>} />
-          <Route path="/profile" element={<Protected><Profile /></Protected>} />
-          <Route path="/admin" element={<Protected><Admin /></Protected>} />
-          <Route path="/search" element={<Protected><Search /></Protected>} />
-          <Route path="/my-recipes" element={<Protected><MyRecipes /></Protected>} />
-          <Route path="/my-drafts" element={<Protected><MyDrafts /></Protected>} />
-          <Route path="/menus" element={<Protected><Menus /></Protected>} />
-          <Route path="/menus/:id" element={<Protected><MenuDetail /></Protected>} />
-          <Route path="/inventory" element={<Protected><Inventory /></Protected>} />
-          <Route path="/shopping" element={<Protected><ShoppingList /></Protected>} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  if (window.location.hostname === 'localhost') {
+    // Simuliere einen eingeloggten Test-Benutzer
+    const testUser = { email: 'test@imperium.local' };
+    localStorage.setItem('supabase.auth.token', JSON.stringify({ user: testUser }));
+  }
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/" element={<Protected><Home /></Protected>} />
+            <Route path="/recipes" element={<Protected><Recipes /></Protected>} />
+            <Route path="/recipes/new" element={<Protected><RecipeEditor /></Protected>} />
+            <Route path="/recipes/:id" element={<Protected><RecipeDetail /></Protected>} />
+            <Route path="/recipes/:id/edit" element={<Protected><RecipeEditor /></Protected>} />
+            <Route path="/favorites" element={<Protected><Favorites /></Protected>} />
+            <Route path="/chat" element={<Protected><Chat /></Protected>} />
+            <Route path="/profile" element={<Protected><Profile /></Protected>} />
+            <Route path="/admin" element={<Protected><Admin /></Protected>} />
+            <Route path="/search" element={<Protected><Search /></Protected>} />
+            <Route path="/my-recipes" element={<Protected><MyRecipes /></Protected>} />
+            <Route path="/my-drafts" element={<Protected><MyDrafts /></Protected>} />
+            <Route path="/menus" element={<Protected><Menus /></Protected>} />
+            <Route path="/menus/:id" element={<Protected><MenuDetail /></Protected>} />
+            <Route path="/inventory" element={<Protected><Inventory /></Protected>} />
+            <Route path="/shopping" element={<Protected><ShoppingList /></Protected>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
