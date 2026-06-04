@@ -28,7 +28,7 @@ const schema = z.object({
   instructions: z.string().trim().max(8000).optional().or(z.literal("")),
 });
 
-interface Profile { id: string; display_name: string | null; email: string | null; }
+interface Profile { id: string; display_name: string | null; }
 
 export default function RecipeEditor() {
   const { id } = useParams<{ id?: string }>();
@@ -51,7 +51,7 @@ export default function RecipeEditor() {
     supabase.from("categories").select("*").order("is_root", { ascending: false }).order("name")
       .then(({ data }) => setCategories((data ?? []) as CategoryRow[]));
     if (isAdmin) {
-      supabase.from("profiles").select("id,display_name,email").order("display_name")
+      supabase.from("profiles").select("id,display_name").order("display_name")
         .then(({ data }) => setProfiles((data ?? []) as Profile[]));
     }
     if (id) {
@@ -187,7 +187,7 @@ export default function RecipeEditor() {
                 <SelectContent>
                   {profiles.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {p.display_name || p.email || p.id.slice(0, 8)}
+                      {p.display_name || p.id.slice(0, 8)}
                     </SelectItem>
                   ))}
                 </SelectContent>

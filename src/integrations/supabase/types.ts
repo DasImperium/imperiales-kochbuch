@@ -190,6 +190,30 @@ export type Database = {
           },
         ]
       }
+      groups: {
+        Row: {
+          created_at: string
+          id: string
+          join_code: string
+          name: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          join_code: string
+          name: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          join_code?: string
+          name?: string
+          owner_id?: string
+        }
+        Relationships: []
+      }
       hidden_recipes: {
         Row: {
           created_at: string
@@ -406,6 +430,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           email: string | null
+          group_id: string | null
           group_name: string | null
           id: string
         }
@@ -414,6 +439,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           email?: string | null
+          group_id?: string | null
           group_name?: string | null
           id: string
         }
@@ -422,10 +448,19 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           email?: string | null
+          group_id?: string | null
           group_name?: string | null
           id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ratings: {
         Row: {
@@ -603,6 +638,31 @@ export type Database = {
         Args: { _recipe_id: string; _tag: string }
         Returns: undefined
       }
+      admin_list_users: {
+        Args: never
+        Returns: {
+          display_name: string
+          email: string
+          id: string
+        }[]
+      }
+      create_group: {
+        Args: { _name: string }
+        Returns: {
+          created_at: string
+          id: string
+          join_code: string
+          name: string
+          owner_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "groups"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      find_user_id_by_email: { Args: { _email: string }; Returns: string }
       group_member_ids: { Args: { _uid: string }; Returns: string[] }
       has_list_access: {
         Args: { _kind: string; _owner_id: string }
@@ -616,6 +676,24 @@ export type Database = {
         Returns: boolean
       }
       is_superadmin_user: { Args: { _user_id: string }; Returns: boolean }
+      join_group: {
+        Args: { _code: string }
+        Returns: {
+          created_at: string
+          id: string
+          join_code: string
+          name: string
+          owner_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "groups"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      leave_group: { Args: never; Returns: undefined }
+      regenerate_join_code: { Args: { _group_id: string }; Returns: string }
       remove_recipe_tag: {
         Args: { _recipe_id: string; _tag: string }
         Returns: undefined

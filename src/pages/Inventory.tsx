@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Trash2, Plus, History, Save, Share2, X, ArrowDownAZ, AlertTriangle, Users } from "lucide-react";
+import { Trash2, Plus, History, Save, Share2, X, ArrowDownAZ, AlertTriangle, Users, Copy, RefreshCw, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { normalize, toBase } from "@/lib/units";
 import { HINT_PREFIX } from "@/pages/Chat";
@@ -13,7 +13,8 @@ interface Item {
   id: string; owner_id: string; name: string; amount: number; unit: string;
   safety_stock: number; min_stock: number;
 }
-interface Profile { id: string; display_name: string | null; email: string | null; group_name: string | null; }
+interface Profile { id: string; display_name: string | null; group_id: string | null; }
+interface Group { id: string; name: string; owner_id: string; join_code: string; }
 
 const MAX_SNAPSHOTS = 2;
 
@@ -31,8 +32,10 @@ const rowClass = (l: 0 | 1 | 2) =>
 export default function Inventory() {
   const { user } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
-  const [groupName, setGroupName] = useState<string>("");
+  const [group, setGroup] = useState<Group | null>(null);
   const [groupMembers, setGroupMembers] = useState<Profile[]>([]);
+  const [groupNameInput, setGroupNameInput] = useState("");
+  const [joinCodeInput, setJoinCodeInput] = useState("");
   const [name, setName] = useState(""); const [amount, setAmount] = useState(""); const [unit, setUnit] = useState("");
   const [safety, setSafety] = useState(""); const [minS, setMinS] = useState("");
   const [shareEmail, setShareEmail] = useState("");
@@ -44,17 +47,19 @@ export default function Inventory() {
   const load = async () => {
     if (!user) return;
     // Eigene Gruppe
-    const { data: me } = await supabase.from("profiles").select("group_name").eq("id", user.id).maybeSingle();
-    const gn = (me?.group_name ?? "").trim();
-    setGroupName(gn);
+    const { data: me } = await supabase.from("profiles").select("group_id").eq("id", user.id).maybeSingle();
+    const gid = (me as any)?.group_id as string | null;
 
-    // Owner-IDs: ich + alle in selber Gruppe + alle, die mir freigegeben haben
     const ownerIds = new Set<string>([user.id]);
-    if (gn) {
-      const { data: mates } = await supabase.from("profiles").select("id,display_name,email,group_name").ilike("group_name", gn);
+    if (gid) {
+      const { data: g } = await supabase.from("groups").select("*").eq("id", gid).maybeSingle();
+      setGroup((g as any) ?? null);
+      const { data: mates } = await supabase.from("profiles").select("id,display_name,group_id").eq("group_id", gid);
       (mates ?? []).forEach((m: any) => ownerIds.add(m.id));
       setGroupMembers((mates ?? []) as Profile[]);
-    } else setGroupMembers([]);
+    } else {
+      setGroup(null); setGroupMembers([]);
+    }
 
     const { data: sharedTo } = await supabase.from("list_shares").select("owner_id").eq("shared_with", user.id).eq("list_kind", "inventory");
     (sharedTo ?? []).forEach((s: any) => ownerIds.add(s.owner_id));
@@ -65,7 +70,7 @@ export default function Inventory() {
 
     const { data: sh } = await supabase.from("list_shares").select("*").eq("owner_id", user.id).eq("list_kind", "inventory");
     if (sh && sh.length) {
-      const { data: ps } = await supabase.from("profiles").select("id,display_name,email,group_name").in("id", sh.map((s: any) => s.shared_with));
+      const { data: ps } = await supabase.from("profiles").select("id,display_name,group_id").in("id", sh.map((s: any) => s.shared_with));
       setShares(sh.map((s: any) => ({ id: s.id, shared_with: s.shared_with, profile: (ps as any)?.find((p: any) => p.id === s.shared_with) ?? null })));
     } else setShares([]);
 
@@ -82,17 +87,43 @@ export default function Inventory() {
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "list_shares" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "groups" }, load)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [user]);
 
-  const saveGroup = async () => {
-    if (!user) return;
-    const gn = groupName.trim().slice(0, 60);
-    await supabase.from("profiles").update({ group_name: gn || null }).eq("id", user.id);
-    toast.success(gn ? `Gruppe gesetzt: ${gn}` : "Gruppe entfernt");
-    load();
+  const createGroup = async () => {
+    const nm = groupNameInput.trim();
+    if (!nm) { toast.error("Name erforderlich"); return; }
+    const { error } = await supabase.rpc("create_group", { _name: nm });
+    if (error) toast.error(error.message);
+    else { toast.success("Gruppe erstellt"); setGroupNameInput(""); load(); }
   };
+  const joinGroup = async () => {
+    const code = joinCodeInput.trim().toUpperCase();
+    if (!code) return;
+    const { error } = await supabase.rpc("join_group", { _code: code });
+    if (error) toast.error("Beitrittscode ungültig");
+    else { toast.success("Gruppe beigetreten"); setJoinCodeInput(""); load(); }
+  };
+  const leaveGroup = async () => {
+    if (!confirm("Wollen Sie die Gruppe wirklich verlassen?")) return;
+    const { error } = await supabase.rpc("leave_group");
+    if (error) toast.error(error.message);
+    else { toast.success("Gruppe verlassen"); load(); }
+  };
+  const regenCode = async () => {
+    if (!group) return;
+    const { data, error } = await supabase.rpc("regenerate_join_code", { _group_id: group.id });
+    if (error) toast.error(error.message);
+    else { toast.success("Neuer Code: " + data); load(); }
+  };
+  const copyCode = () => {
+    if (!group) return;
+    navigator.clipboard.writeText(group.join_code);
+    toast.success("Code kopiert");
+  };
+
 
   const checkAndNotify = async (mine: Item[]) => {
     if (!user) return;
@@ -174,10 +205,10 @@ export default function Inventory() {
 
   const share = async () => {
     if (!user || !shareEmail.trim()) return;
-    const { data: prof } = await supabase.from("profiles").select("id").eq("email", shareEmail.trim().toLowerCase()).maybeSingle();
-    if (!prof) { toast.error("Nutzer nicht gefunden"); return; }
-    if (prof.id === user.id) { toast.error("Eigene Liste kann nicht freigegeben werden"); return; }
-    const { error } = await supabase.from("list_shares").insert({ owner_id: user.id, shared_with: prof.id, list_kind: "inventory" });
+    const { data: uid, error: lookupErr } = await supabase.rpc("find_user_id_by_email", { _email: shareEmail.trim() });
+    if (lookupErr || !uid) { toast.error("Nutzer nicht gefunden"); return; }
+    if (uid === user.id) { toast.error("Eigene Liste kann nicht freigegeben werden"); return; }
+    const { error } = await supabase.from("list_shares").insert({ owner_id: user.id, shared_with: uid, list_kind: "inventory" });
     if (error) toast.error(error.code === "23505" ? "Bereits freigegeben" : error.message);
     else { setShareEmail(""); toast.success("Freigegeben"); load(); }
   };
@@ -189,22 +220,47 @@ export default function Inventory() {
     <div className="container mx-auto px-4 py-8 max-w-5xl">
       <h1 className="imperial-heading text-3xl text-gold mb-4 break-words">Inventar</h1>
 
-      {/* Gruppensynchronisation */}
+      {/* Gruppensynchronisation per Beitrittscode */}
       <Card className="bg-white text-black border-gold/30 p-4 mb-4">
         <h3 className="font-bold text-[#006400] mb-2 flex items-center gap-2"><Users className="w-4 h-4" />Gruppe (Echtzeit-Sync)</h3>
-        <div className="flex gap-2 items-end flex-wrap">
-          <div className="flex-1 min-w-[200px]">
-            <label className="text-xs">Gruppenname (alle mit gleichem Namen teilen Inventar &amp; Einkauf)</label>
-            <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="z. B. Haushalt Meier" className="bg-white text-black" />
+        {group ? (
+          <>
+            <p className="text-sm mb-2"><strong>Gruppe:</strong> {group.name}</p>
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <span className="text-xs">Beitrittscode:</span>
+              <code className="bg-gray-100 px-2 py-1 rounded font-mono text-sm">{group.join_code}</code>
+              <Button size="sm" variant="outline" onClick={copyCode}><Copy className="w-3 h-3 mr-1" />Kopieren</Button>
+              {group.owner_id === user?.id && (
+                <Button size="sm" variant="outline" onClick={regenCode}><RefreshCw className="w-3 h-3 mr-1" />Code erneuern</Button>
+              )}
+              <Button size="sm" variant="destructive" onClick={leaveGroup}><LogOut className="w-3 h-3 mr-1" />Verlassen</Button>
+            </div>
+            {groupMembers.length > 0 && (
+              <p className="text-xs text-content-fg/70">
+                Mitglieder: {groupMembers.map((m) => m.display_name || m.id.slice(0, 6)).join(", ")}
+              </p>
+            )}
+          </>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs">Neue Gruppe erstellen</label>
+              <div className="flex gap-2">
+                <Input value={groupNameInput} onChange={(e) => setGroupNameInput(e.target.value)} placeholder="Name (z. B. Haushalt Meier)" className="bg-white text-black" />
+                <Button onClick={createGroup} variant="gold">Erstellen</Button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs">Bestehender Gruppe beitreten</label>
+              <div className="flex gap-2">
+                <Input value={joinCodeInput} onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())} placeholder="Beitrittscode" maxLength={20} className="bg-white text-black font-mono" />
+                <Button onClick={joinGroup} variant="gold">Beitreten</Button>
+              </div>
+            </div>
           </div>
-          <Button onClick={saveGroup} variant="gold">Speichern</Button>
-        </div>
-        {groupName && groupMembers.length > 0 && (
-          <p className="text-xs text-content-fg/70 mt-2">
-            Mitglieder: {groupMembers.map((m) => m.display_name || m.email || m.id.slice(0, 6)).join(", ")}
-          </p>
         )}
       </Card>
+
 
       <Card className="bg-white text-black border-gold/30 p-4 mb-4">
         <div className="text-xs font-bold text-[#006400] mb-2">Neu: Menge | Einheit | Zutat | Sicherheitsbestand | Mindestbestand</div>
@@ -330,7 +386,7 @@ export default function Inventory() {
           <ul className="space-y-1">
             {shares.map((s) => (
               <li key={s.id} className="flex items-center justify-between text-sm bg-gray-100 rounded px-2 py-1">
-                <span>{s.profile?.display_name ?? s.profile?.email ?? s.shared_with.slice(0, 8)}</span>
+                <span>{s.profile?.display_name ?? s.shared_with.slice(0, 8)}</span>
                 <Button size="icon" variant="destructive" className="h-6 w-6" onClick={() => unshare(s.id)}><X className="w-3 h-3" /></Button>
               </li>
             ))}

@@ -33,7 +33,7 @@ export default function Admin() {
       rqQuery,
       supabase.from("recipes").select("id,title,forced_visible,protection_tier").is("deleted_at", null).order("created_at", { ascending: false }).limit(80),
       supabase.from("recipes").select("id,title,deleted_at,deleted_by_tier,deleted_by_user,protection_tier").not("deleted_at", "is", null).order("deleted_at", { ascending: false }),
-      supabase.from("profiles").select("id,display_name,email").order("display_name"),
+      supabase.rpc("admin_list_users"),
       supabase.from("user_roles").select("user_id,role"),
     ]);
     setRequests(rq ?? []);
@@ -77,9 +77,9 @@ export default function Admin() {
     if (!email) return;
     const requiredTier = ROLE_TIER[grantRole];
     if (requiredTier > tier) { toast.error(`Nur ${TIER_LABEL[requiredTier] ?? "höhere Stufe"} darf das vergeben`); return; }
-    const { data: prof } = await supabase.from("profiles").select("id").eq("email", email).maybeSingle();
-    if (!prof) { toast.error("Nutzer nicht gefunden"); return; }
-    const { error } = await supabase.from("user_roles").insert({ user_id: prof.id, role: grantRole });
+    const { data: uid } = await supabase.rpc("find_user_id_by_email", { _email: email });
+    if (!uid) { toast.error("Nutzer nicht gefunden"); return; }
+    const { error } = await supabase.from("user_roles").insert({ user_id: uid, role: grantRole });
     if (error && error.code !== "23505") toast.error(error.message);
     else { toast.success(`${TIER_LABEL[requiredTier]}-Rolle vergeben`); setGrantEmail(""); load(); }
   };
