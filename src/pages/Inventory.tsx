@@ -135,7 +135,6 @@ export default function Inventory() {
     const key = `${it.id}:${l}`;
     
     // Wenn alles okay ist oder für exakt diesen Zustand bereits gewarnt wurde -> abbrechen.
-    // Verhindert mehrfaches Hinzufügen zur Einkaufsliste bei wiederholten Änderungen im selben Level!
     if (l === 0 || warnedIds.has(key)) return;
 
     // Aktualisiere den State der bereits gewarnten IDs
@@ -162,11 +161,12 @@ export default function Inventory() {
         }
       }
 
+      // Geändert: Das Minus "–" wurde durch einen Doppelpunkt ":" ersetzt
       for (const rcptId of recipients) {
         await supabase.from("chat_messages").insert({
           sender_id: user.id, 
           recipient_id: rcptId,
-          content: `${HINT_PREFIX}Achtung: Mindestbestand für ${it.name} unterschritten – ${it.min_stock} ${it.unit} der Einkaufsliste hinzugefügt.`,
+          content: `${HINT_PREFIX}Achtung: Mindestbestand für ${it.name} unterschritten: ${it.min_stock} ${it.unit} der Einkaufsliste hinzugefügt.`,
         });
       }
     } 
