@@ -42,7 +42,7 @@ export default function Inventory() {
   const [shares, setShares] = useState<{ id: string; shared_with: string; profile?: Profile | null }[]>([]);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [warnedIds, setWarnedIds] = useState<Set<string>>(new Set());
-  const [sortAlpha, setSortAlpha] = useState(false); // Standardmäßig auf Standard-Eintragsreihenfolge setzen
+  const [sortAlpha, setSortAlpha] = useState(false);
 
   const load = async () => {
     if (!user) return;
@@ -68,7 +68,6 @@ export default function Inventory() {
     const { data: sharedTo } = await supabase.from("list_shares").select("owner_id").eq("shared_with", user.id).eq("list_kind", "inventory");
     (sharedTo ?? []).forEach((s: any) => ownerIds.add(s.owner_id));
 
-    // Aus der DB rufen wir die Daten nach Erstellungsdatum ab, um die Eintragungsreihenfolge für "Standard" zu wahren
     const { data } = await supabase.from("inventory_items").select("*").in("owner_id", Array.from(ownerIds)).order("created_at", { ascending: true });
     const list = (data ?? []) as Item[];
     setItems(list);
@@ -81,8 +80,6 @@ export default function Inventory() {
 
     const { data: snaps } = await supabase.from("list_snapshots").select("*").eq("owner_id", user.id).eq("list_kind", "inventory").order("created_at", { ascending: false }).limit(MAX_SNAPSHOTS);
     setSnapshots(snaps ?? []);
-
-    checkAndNotify(list.filter((i) => i.owner_id === user.id || currentMates.some(m => m.id === i.owner_id)), currentMates);
   };
 
   useEffect(() => { load(); }, [user]);
@@ -130,50 +127,61 @@ export default function Inventory() {
     toast.success("Code kopiert");
   };
 
-  const checkAndNotify = async (mine: Item[], mates: Profile[]) => {
+  // Überprüft das geänderte Item und benachrichtigt NUR bei echtem Statuswechsel
+  const checkSingleItemAndNotify = async (it: Item) => {
     if (!user) return;
-    const newWarn = new Set(warnedIds);
-    const recipients = mates.length > 0 ? mates.map(m => m.id) : [user.id];
+    
+    const l = level(it);
+    const key = `${it.id}:${l}`;
+    
+    // Wenn alles okay ist oder für exakt diesen Zustand bereits gewarnt wurde -> abbrechen.
+    // Verhindert mehrfaches Hinzufügen zur Einkaufsliste bei wiederholten Änderungen im selben Level!
+    if (l === 0 || warnedIds.has(key)) return;
 
-    for (const it of mine) {
-      const l = level(it);
-      const key = `${it.id}:${l}`;
-      if (l === 0 || newWarn.has(key)) continue;
-      newWarn.add(key);
+    // Aktualisiere den State der bereits gewarnten IDs
+    setWarnedIds(prev => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
 
-      if (l === 2) {
-        const minAmount = Number(it.min_stock || 0);
-        if (minAmount > 0) {
-          const { data: existing } = await supabase.from("shopping_items").select("id,amount")
-            .eq("owner_id", it.owner_id).ilike("name", it.name).eq("unit", it.unit).eq("checked", false).maybeSingle();
-          if (!existing) {
-            await supabase.from("shopping_items").insert({
-              owner_id: it.owner_id, name: it.name, amount: minAmount, unit: it.unit,
-            });
-          }
-        }
+    const recipients = groupMembers.length > 0 ? groupMembers.map(m => m.id) : [user.id];
 
-        for (const rcptId of recipients) {
-          await supabase.from("chat_messages").insert({
-            sender_id: user.id, 
-            recipient_id: rcptId,
-            content: `${HINT_PREFIX}Achtung: Mindestbestand für ${it.name} unterschritten – ${it.min_stock} ${it.unit} der Einkaufsliste hinzugefügt.`,
-          });
-        }
-      } else if (l === 1) {
-        for (const rcptId of recipients) {
-          await supabase.from("chat_messages").insert({
-            sender_id: user.id, 
-            recipient_id: rcptId,
-            content: `${HINT_PREFIX}Warnung: Sicherheitsbestand für ${it.name} (${it.amount} ${it.unit}) unterschritten.`,
+    // LEVEL 2: Mindestbestand unterschritten
+    if (l === 2) {
+      const minAmount = Number(it.min_stock || 0);
+      if (minAmount > 0) {
+        // Prüfen, ob der Artikel bereits auf der Einkaufsliste steht (unbearbeitet)
+        const { data: existing } = await supabase.from("shopping_items").select("id,amount")
+          .eq("owner_id", it.owner_id).ilike("name", it.name).eq("unit", it.unit).eq("checked", false).maybeSingle();
+        
+        if (!existing) {
+          await supabase.from("shopping_items").insert({
+            owner_id: it.owner_id, name: it.name, amount: minAmount, unit: it.unit,
           });
         }
       }
+
+      for (const rcptId of recipients) {
+        await supabase.from("chat_messages").insert({
+          sender_id: user.id, 
+          recipient_id: rcptId,
+          content: `${HINT_PREFIX}Achtung: Mindestbestand für ${it.name} unterschritten – ${it.min_stock} ${it.unit} der Einkaufsliste hinzugefügt.`,
+        });
+      }
+    } 
+    // LEVEL 1: Sicherheitsbestand unterschritten (nur wenn nicht Level 2)
+    else if (l === 1) {
+      for (const rcptId of recipients) {
+        await supabase.from("chat_messages").insert({
+          sender_id: user.id, 
+          recipient_id: rcptId,
+          content: `${HINT_PREFIX}Warnung: Sicherheitsbestand für ${it.name} (${it.amount} ${it.unit}) unterschritten.`,
+        });
+      }
     }
-    setWarnedIds(newWarn);
   };
 
-  // Sortierungs-Logik: Toggelt flexibel zwischen Name (Alphabetisch) und Eintragsreihenfolge (Standard)
   const sortedItems = useMemo(() => {
     const arr = [...items];
     if (sortAlpha) {
@@ -186,18 +194,33 @@ export default function Inventory() {
     if (!user || !name.trim()) return;
     const a = parseFloat(amount.replace(",", ".")) || 0;
     const n = normalize(a, unit);
-    const { error } = await supabase.from("inventory_items").insert({
+    
+    const newItem = {
       owner_id: user.id, name: name.trim(), amount: n.amount, unit: n.unit,
       safety_stock: parseFloat(safety.replace(",", ".")) || 0,
       min_stock: parseFloat(minS.replace(",", ".")) || 0,
-    });
-    if (error) toast.error(error.message);
-    else { setName(""); setAmount(""); setUnit(""); setSafety(""); setMinS(""); load(); }
+    };
+
+    const { data, error } = await supabase.from("inventory_items").insert(newItem).select().single();
+    
+    if (error) {
+      toast.error(error.message);
+    } else {
+      setName(""); setAmount(""); setUnit(""); setSafety(""); setMinS("");
+      if (data) checkSingleItemAndNotify(data as Item);
+      load();
+    }
   };
 
   const update = async (it: Item, patch: Partial<Item>) => {
-    await supabase.from("inventory_items").update(patch).eq("id", it.id);
-    load();
+    const updatedItem = { ...it, ...patch };
+    
+    const { error } = await supabase.from("inventory_items").update(patch).eq("id", it.id);
+    
+    if (!error) {
+      checkSingleItemAndNotify(updatedItem);
+      load();
+    }
   };
 
   const remove = async (it: Item) => {
@@ -317,7 +340,6 @@ export default function Inventory() {
               <tbody>
                 {sortedItems.map((it) => {
                   const l = level(it);
-                  // Geändert: Jeder Nutzer der Gruppe darf editieren/löschen
                   const own = it.owner_id === user?.id || groupMembers.some(m => m.id === it.owner_id);
                   return (
                     <tr key={it.id} className={`border-t ${rowClass(l)}`}>
@@ -347,7 +369,6 @@ export default function Inventory() {
             <ul className="md:hidden divide-y divide-gray-300">
               {sortedItems.map((it, idx) => {
                 const l = level(it);
-                // Geändert: Jeder Nutzer der Gruppe darf editieren/löschen
                 const own = it.owner_id === user?.id || groupMembers.some(m => m.id === it.owner_id);
                 return (
                   <li key={it.id} className={`p-3 ${rowClass(l)} ${idx % 2 === 1 && l === 0 ? "bg-gray-50" : ""}`}>
