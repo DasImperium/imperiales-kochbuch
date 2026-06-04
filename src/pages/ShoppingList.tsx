@@ -34,6 +34,7 @@ export default function ShoppingList() {
     const owners = Array.from(ids);
     setOwnerIds(owners);
 
+    // Standard-Reihenfolge ab Werk aus der DB laden
     const { data } = await supabase.from("shopping_items").select("*").in("owner_id", owners).order("checked").order("name");
     setRaw((data ?? []) as Item[]);
     const { data: snaps } = await supabase.from("list_snapshots").select("*").eq("owner_id", user.id).eq("list_kind", "shopping").order("created_at", { ascending: false }).limit(MAX_SNAPSHOTS);
@@ -65,7 +66,11 @@ export default function ShoppingList() {
       }
     }
     let arr = Array.from(groups.values());
-    if (sortAlpha) arr.sort((a, b) => a.name.localeCompare(b.name, "de"));
+    
+    // Sortierung umschalten anhand des Buttons
+    if (sortAlpha) {
+      arr.sort((a, b) => a.name.localeCompare(b.name, "de"));
+    }
     return arr;
   }, [raw, sortAlpha]);
 
@@ -80,7 +85,6 @@ export default function ShoppingList() {
   const allMatchingIds = (it: Item) =>
     raw.filter((r) => r.name.toLowerCase().trim() === it.name.toLowerCase().trim() && r.checked === it.checked).map((r) => r.id);
 
-  // Aktualisiert veränderte Werte für alle matchenden IDs der Gruppierung
   const update = async (it: Item, patch: Partial<Item>) => {
     const ids = allMatchingIds(it);
     if (ids.length === 0) return;
@@ -155,8 +159,9 @@ export default function ShoppingList() {
         </div>
       </Card>
 
+      {/* Synchronisierter Sortier-Button analog zum Inventar */}
       <div className="flex items-center justify-end mb-2">
-        <Button size="sm" variant="outline" onClick={() => setSortAlpha((v) => !v)}>
+        <Button variant="outline" size="sm" onClick={() => setSortAlpha((v) => !v)}>
           <ArrowDownAZ className="w-4 h-4 mr-1" />{sortAlpha ? "Standard-Sortierung" : "Alphabetisch ordnen"}
         </Button>
       </div>
@@ -168,7 +173,6 @@ export default function ShoppingList() {
               <li key={it.id} className={`flex items-center gap-2 p-2 flex-wrap ${it.checked ? "opacity-60" : ""}`}>
                 <Checkbox checked={it.checked} onCheckedChange={() => toggle(it)} />
                 
-                {/* Menge editierbar */}
                 <Input 
                   defaultValue={it.amount > 0 ? String(it.amount) : ""} 
                   inputMode="decimal"
@@ -183,7 +187,6 @@ export default function ShoppingList() {
                   className="w-20 text-right font-mono h-8 bg-white text-black"
                 />
 
-                {/* Einheit editierbar */}
                 <Input 
                   defaultValue={it.unit}
                   placeholder="Einheit"
@@ -196,7 +199,6 @@ export default function ShoppingList() {
                   className="w-16 text-sm h-8 bg-white text-black"
                 />
 
-                {/* Zutat / Name editierbar (Substituieren) */}
                 <Input 
                   defaultValue={it.name}
                   maxLength={80}
