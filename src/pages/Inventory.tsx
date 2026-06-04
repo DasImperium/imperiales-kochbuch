@@ -32,8 +32,10 @@ const rowClass = (l: 0 | 1 | 2) =>
 export default function Inventory() {
   const { user } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
-  const [groupName, setGroupName] = useState<string>("");
+  const [group, setGroup] = useState<Group | null>(null);
   const [groupMembers, setGroupMembers] = useState<Profile[]>([]);
+  const [groupNameInput, setGroupNameInput] = useState("");
+  const [joinCodeInput, setJoinCodeInput] = useState("");
   const [name, setName] = useState(""); const [amount, setAmount] = useState(""); const [unit, setUnit] = useState("");
   const [safety, setSafety] = useState(""); const [minS, setMinS] = useState("");
   const [shareEmail, setShareEmail] = useState("");
@@ -45,17 +47,19 @@ export default function Inventory() {
   const load = async () => {
     if (!user) return;
     // Eigene Gruppe
-    const { data: me } = await supabase.from("profiles").select("group_name").eq("id", user.id).maybeSingle();
-    const gn = (me?.group_name ?? "").trim();
-    setGroupName(gn);
+    const { data: me } = await supabase.from("profiles").select("group_id").eq("id", user.id).maybeSingle();
+    const gid = (me as any)?.group_id as string | null;
 
-    // Owner-IDs: ich + alle in selber Gruppe + alle, die mir freigegeben haben
     const ownerIds = new Set<string>([user.id]);
-    if (gn) {
-      const { data: mates } = await supabase.from("profiles").select("id,display_name,email,group_name").ilike("group_name", gn);
+    if (gid) {
+      const { data: g } = await supabase.from("groups").select("*").eq("id", gid).maybeSingle();
+      setGroup((g as any) ?? null);
+      const { data: mates } = await supabase.from("profiles").select("id,display_name,group_id").eq("group_id", gid);
       (mates ?? []).forEach((m: any) => ownerIds.add(m.id));
       setGroupMembers((mates ?? []) as Profile[]);
-    } else setGroupMembers([]);
+    } else {
+      setGroup(null); setGroupMembers([]);
+    }
 
     const { data: sharedTo } = await supabase.from("list_shares").select("owner_id").eq("shared_with", user.id).eq("list_kind", "inventory");
     (sharedTo ?? []).forEach((s: any) => ownerIds.add(s.owner_id));
@@ -66,7 +70,7 @@ export default function Inventory() {
 
     const { data: sh } = await supabase.from("list_shares").select("*").eq("owner_id", user.id).eq("list_kind", "inventory");
     if (sh && sh.length) {
-      const { data: ps } = await supabase.from("profiles").select("id,display_name,email,group_name").in("id", sh.map((s: any) => s.shared_with));
+      const { data: ps } = await supabase.from("profiles").select("id,display_name,group_id").in("id", sh.map((s: any) => s.shared_with));
       setShares(sh.map((s: any) => ({ id: s.id, shared_with: s.shared_with, profile: (ps as any)?.find((p: any) => p.id === s.shared_with) ?? null })));
     } else setShares([]);
 
@@ -83,17 +87,43 @@ export default function Inventory() {
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_items" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "list_shares" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "groups" }, load)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [user]);
 
-  const saveGroup = async () => {
-    if (!user) return;
-    const gn = groupName.trim().slice(0, 60);
-    await supabase.from("profiles").update({ group_name: gn || null }).eq("id", user.id);
-    toast.success(gn ? `Gruppe gesetzt: ${gn}` : "Gruppe entfernt");
-    load();
+  const createGroup = async () => {
+    const nm = groupNameInput.trim();
+    if (!nm) { toast.error("Name erforderlich"); return; }
+    const { error } = await supabase.rpc("create_group", { _name: nm });
+    if (error) toast.error(error.message);
+    else { toast.success("Gruppe erstellt"); setGroupNameInput(""); load(); }
   };
+  const joinGroup = async () => {
+    const code = joinCodeInput.trim().toUpperCase();
+    if (!code) return;
+    const { error } = await supabase.rpc("join_group", { _code: code });
+    if (error) toast.error("Beitrittscode ungültig");
+    else { toast.success("Gruppe beigetreten"); setJoinCodeInput(""); load(); }
+  };
+  const leaveGroup = async () => {
+    if (!confirm("Wollen Sie die Gruppe wirklich verlassen?")) return;
+    const { error } = await supabase.rpc("leave_group");
+    if (error) toast.error(error.message);
+    else { toast.success("Gruppe verlassen"); load(); }
+  };
+  const regenCode = async () => {
+    if (!group) return;
+    const { data, error } = await supabase.rpc("regenerate_join_code", { _group_id: group.id });
+    if (error) toast.error(error.message);
+    else { toast.success("Neuer Code: " + data); load(); }
+  };
+  const copyCode = () => {
+    if (!group) return;
+    navigator.clipboard.writeText(group.join_code);
+    toast.success("Code kopiert");
+  };
+
 
   const checkAndNotify = async (mine: Item[]) => {
     if (!user) return;
