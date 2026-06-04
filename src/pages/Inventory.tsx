@@ -13,7 +13,8 @@ interface Item {
   id: string; owner_id: string; name: string; amount: number; unit: string;
   safety_stock: number; min_stock: number;
 }
-interface Profile { id: string; display_name: string | null; email: string | null; group_name: string | null; }
+interface Profile { id: string; display_name: string | null; group_id: string | null; }
+interface Group { id: string; name: string; owner_id: string; join_code: string; }
 
 const MAX_SNAPSHOTS = 2;
 
