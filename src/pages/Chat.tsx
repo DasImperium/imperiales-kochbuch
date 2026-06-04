@@ -66,7 +66,7 @@ export default function Chat() {
   // Ungelesene Nachrichten auswerten
   const loadUnread = async () => {
     if (!user) {
-      // Offline-Zähler-Berechnung basierend auf localMessages
+      // Offline-Zähler-Berechnung basierend on localMessages
       const map: Record<string, number> = {};
       let hints = 0;
       localMessages.forEach(m => {
@@ -247,6 +247,35 @@ export default function Chat() {
     }
   };
 
+  // Alle Hinweise für den aktuellen Nutzer löschen
+  const clearAllHints = async () => {
+    if (!confirm("Möchtest du wirklich alle deine Hinweise unwiderruflich löschen?")) return;
+
+    // Lokal filtern (entfernt alle Systemhinweise)
+    setLocalMessages(prev => prev.filter(m => !isHint(m)));
+    setMessages([]);
+
+    if (user) {
+      try {
+        const { error } = await supabase
+          .from("chat_messages")
+          .delete()
+          .eq("recipient_id", currentUserId)
+          .like("content", `${HINT_PREFIX}%`);
+
+        if (error) throw error;
+        toast.success("Alle Hinweise gelöscht.");
+        loadUnread();
+      } catch (e) {
+        console.error("Fehler beim Löschen der Hinweise", e);
+        toast.error("Fehler beim Löschen der Hinweise auf dem Server.");
+      }
+    } else {
+      toast.success("Lokale Hinweise gelöscht.");
+      loadUnread();
+    }
+  };
+
   const unreadDetail = useMemo(() => {
     const total = Object.values(unreadByConv).reduce((a, b) => a + b, 0) + hintUnread;
     const parts: string[] = [];
@@ -334,8 +363,22 @@ export default function Chat() {
               <Button type="button" variant="ghost" size="sm" onClick={() => setActive("")} className="text-black hover:bg-gray-200 flex items-center gap-1 text-xs h-8">
                 <ArrowLeft className="w-3.5 h-3.5" /> Kontakte
               </Button>
-              <span className="text-xs font-bold text-black truncate max-w-[60%]">{activeChatName}</span>
-              <div className="w-12" />
+              <span className="text-xs font-bold text-black truncate max-w-[40%]">{activeChatName}</span>
+              
+              {/* Zeige den "Löschen" Button nur an, wenn der Hinweise-Kanal aktiv ist */}
+              {isHintsActive ? (
+                <Button 
+                  type="button" 
+                  variant="destructive" 
+                  size="sm" 
+                  onClick={clearAllHints} 
+                  className="text-xs h-7 gap-1 px-2"
+                >
+                  <Trash2 className="w-3 h-3" /> Alle löschen
+                </Button>
+              ) : (
+                <div className="w-12" />
+              )}
             </div>
           )}
 
