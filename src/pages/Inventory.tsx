@@ -220,22 +220,47 @@ export default function Inventory() {
     <div className="container mx-auto px-4 py-8 max-w-5xl">
       <h1 className="imperial-heading text-3xl text-gold mb-4 break-words">Inventar</h1>
 
-      {/* Gruppensynchronisation */}
+      {/* Gruppensynchronisation per Beitrittscode */}
       <Card className="bg-white text-black border-gold/30 p-4 mb-4">
         <h3 className="font-bold text-[#006400] mb-2 flex items-center gap-2"><Users className="w-4 h-4" />Gruppe (Echtzeit-Sync)</h3>
-        <div className="flex gap-2 items-end flex-wrap">
-          <div className="flex-1 min-w-[200px]">
-            <label className="text-xs">Gruppenname (alle mit gleichem Namen teilen Inventar &amp; Einkauf)</label>
-            <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="z. B. Haushalt Meier" className="bg-white text-black" />
+        {group ? (
+          <>
+            <p className="text-sm mb-2"><strong>Gruppe:</strong> {group.name}</p>
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <span className="text-xs">Beitrittscode:</span>
+              <code className="bg-gray-100 px-2 py-1 rounded font-mono text-sm">{group.join_code}</code>
+              <Button size="sm" variant="outline" onClick={copyCode}><Copy className="w-3 h-3 mr-1" />Kopieren</Button>
+              {group.owner_id === user?.id && (
+                <Button size="sm" variant="outline" onClick={regenCode}><RefreshCw className="w-3 h-3 mr-1" />Code erneuern</Button>
+              )}
+              <Button size="sm" variant="destructive" onClick={leaveGroup}><LogOut className="w-3 h-3 mr-1" />Verlassen</Button>
+            </div>
+            {groupMembers.length > 0 && (
+              <p className="text-xs text-content-fg/70">
+                Mitglieder: {groupMembers.map((m) => m.display_name || m.id.slice(0, 6)).join(", ")}
+              </p>
+            )}
+          </>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs">Neue Gruppe erstellen</label>
+              <div className="flex gap-2">
+                <Input value={groupNameInput} onChange={(e) => setGroupNameInput(e.target.value)} placeholder="Name (z. B. Haushalt Meier)" className="bg-white text-black" />
+                <Button onClick={createGroup} variant="gold">Erstellen</Button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs">Bestehender Gruppe beitreten</label>
+              <div className="flex gap-2">
+                <Input value={joinCodeInput} onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())} placeholder="Beitrittscode" maxLength={20} className="bg-white text-black font-mono" />
+                <Button onClick={joinGroup} variant="gold">Beitreten</Button>
+              </div>
+            </div>
           </div>
-          <Button onClick={saveGroup} variant="gold">Speichern</Button>
-        </div>
-        {groupName && groupMembers.length > 0 && (
-          <p className="text-xs text-content-fg/70 mt-2">
-            Mitglieder: {groupMembers.map((m) => m.display_name || m.email || m.id.slice(0, 6)).join(", ")}
-          </p>
         )}
       </Card>
+
 
       <Card className="bg-white text-black border-gold/30 p-4 mb-4">
         <div className="text-xs font-bold text-[#006400] mb-2">Neu: Menge | Einheit | Zutat | Sicherheitsbestand | Mindestbestand</div>
