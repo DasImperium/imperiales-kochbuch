@@ -33,7 +33,7 @@ export default function Admin() {
       rqQuery,
       supabase.from("recipes").select("id,title,forced_visible,protection_tier").is("deleted_at", null).order("created_at", { ascending: false }).limit(80),
       supabase.from("recipes").select("id,title,deleted_at,deleted_by_tier,deleted_by_user,protection_tier").not("deleted_at", "is", null).order("deleted_at", { ascending: false }),
-      supabase.from("profiles").select("id,display_name,email").order("display_name"),
+      supabase.rpc("admin_list_users"),
       supabase.from("user_roles").select("user_id,role"),
     ]);
     setRequests(rq ?? []);
