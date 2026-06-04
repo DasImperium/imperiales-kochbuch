@@ -386,7 +386,7 @@ export default function Inventory() {
           <ul className="space-y-1">
             {shares.map((s) => (
               <li key={s.id} className="flex items-center justify-between text-sm bg-gray-100 rounded px-2 py-1">
-                <span>{s.profile?.display_name ?? s.profile?.email ?? s.shared_with.slice(0, 8)}</span>
+                <span>{s.profile?.display_name ?? s.shared_with.slice(0, 8)}</span>
                 <Button size="icon" variant="destructive" className="h-6 w-6" onClick={() => unshare(s.id)}><X className="w-3 h-3" /></Button>
               </li>
             ))}
