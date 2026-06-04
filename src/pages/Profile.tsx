@@ -149,11 +149,15 @@ export default function Profile() {
           <div className="space-y-2">
             <p className="text-sm"><strong>{group.name}</strong></p>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs">Beitrittscode:</span>
-              <code className="bg-background/60 px-2 py-1 rounded font-mono text-sm">{group.join_code}</code>
-              <Button size="sm" variant="outline" onClick={copyCode}><Copy className="w-3 h-3 mr-1" />Kopieren</Button>
-              {group.owner_id === user?.id && (
-                <Button size="sm" variant="outline" onClick={regenCode}><RefreshCw className="w-3 h-3 mr-1" />Code erneuern</Button>
+              {group.owner_id === user?.id ? (
+                <>
+                  <span className="text-xs">Beitrittscode:</span>
+                  <code className="bg-background/60 px-2 py-1 rounded font-mono text-sm">{group.join_code}</code>
+                  <Button size="sm" variant="outline" onClick={copyCode}><Copy className="w-3 h-3 mr-1" />Kopieren</Button>
+                  <Button size="sm" variant="outline" onClick={regenCode}><RefreshCw className="w-3 h-3 mr-1" />Code erneuern</Button>
+                </>
+              ) : (
+                <span className="text-xs text-surface-foreground/60">Nur der Eigentümer kann den Beitrittscode einsehen.</span>
               )}
               <Button size="sm" variant="destructive" onClick={leaveGroup}><LogOut className="w-3 h-3 mr-1" />Verlassen</Button>
             </div>
