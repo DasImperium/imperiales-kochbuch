@@ -11,7 +11,7 @@ import { HINT_PREFIX } from "@/pages/Chat";
 
 interface Item {
   id: string; owner_id: string; name: string; amount: number; unit: string;
-  safety_stock: number; min_stock: number;
+  safety_stock: number; min_stock: number; created_at?: string;
 }
 interface Profile { id: string; display_name: string | null; group_id: string | null; }
 interface Group { id: string; name: string; owner_id: string; join_code: string; }
@@ -42,7 +42,7 @@ export default function Inventory() {
   const [shares, setShares] = useState<{ id: string; shared_with: string; profile?: Profile | null }[]>([]);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [warnedIds, setWarnedIds] = useState<Set<string>>(new Set());
-  const [sortAlpha, setSortAlpha] = useState(true);
+  const [sortAlpha, setSortAlpha] = useState(false); // Standardmäßig auf Standard-Eintragsreihenfolge setzen
 
   const load = async () => {
     if (!user) return;
@@ -68,7 +68,8 @@ export default function Inventory() {
     const { data: sharedTo } = await supabase.from("list_shares").select("owner_id").eq("shared_with", user.id).eq("list_kind", "inventory");
     (sharedTo ?? []).forEach((s: any) => ownerIds.add(s.owner_id));
 
-    const { data } = await supabase.from("inventory_items").select("*").in("owner_id", Array.from(ownerIds)).order("name");
+    // Aus der DB rufen wir die Daten nach Erstellungsdatum ab, um die Eintragungsreihenfolge für "Standard" zu wahren
+    const { data } = await supabase.from("inventory_items").select("*").in("owner_id", Array.from(ownerIds)).order("created_at", { ascending: true });
     const list = (data ?? []) as Item[];
     setItems(list);
 
@@ -81,7 +82,6 @@ export default function Inventory() {
     const { data: snaps } = await supabase.from("list_snapshots").select("*").eq("owner_id", user.id).eq("list_kind", "inventory").order("created_at", { ascending: false }).limit(MAX_SNAPSHOTS);
     setSnapshots(snaps ?? []);
 
-    // Benachrichtigungen prüfen (Für eigene Items oder Gruppen-Items)
     checkAndNotify(list.filter((i) => i.owner_id === user.id || currentMates.some(m => m.id === i.owner_id)), currentMates);
   };
 
@@ -133,8 +133,6 @@ export default function Inventory() {
   const checkAndNotify = async (mine: Item[], mates: Profile[]) => {
     if (!user) return;
     const newWarn = new Set(warnedIds);
-    
-    // Empfänger-Liste definieren (Entweder die ganze Gruppe oder nur ich selbst)
     const recipients = mates.length > 0 ? mates.map(m => m.id) : [user.id];
 
     for (const it of mine) {
@@ -155,7 +153,6 @@ export default function Inventory() {
           }
         }
 
-        // Nachricht an alle Betroffenen in den "Hinweise"-Kanal schicken
         for (const rcptId of recipients) {
           await supabase.from("chat_messages").insert({
             sender_id: user.id, 
@@ -176,9 +173,12 @@ export default function Inventory() {
     setWarnedIds(newWarn);
   };
 
+  // Sortierungs-Logik: Toggelt flexibel zwischen Name (Alphabetisch) und Eintragsreihenfolge (Standard)
   const sortedItems = useMemo(() => {
     const arr = [...items];
-    if (sortAlpha) arr.sort((a, b) => a.name.localeCompare(b.name, "de"));
+    if (sortAlpha) {
+      arr.sort((a, b) => a.name.localeCompare(b.name, "de"));
+    }
     return arr;
   }, [items, sortAlpha]);
 
@@ -317,6 +317,7 @@ export default function Inventory() {
               <tbody>
                 {sortedItems.map((it) => {
                   const l = level(it);
+                  // Geändert: Jeder Nutzer der Gruppe darf editieren/löschen
                   const own = it.owner_id === user?.id || groupMembers.some(m => m.id === it.owner_id);
                   return (
                     <tr key={it.id} className={`border-t ${rowClass(l)}`}>
@@ -346,6 +347,7 @@ export default function Inventory() {
             <ul className="md:hidden divide-y divide-gray-300">
               {sortedItems.map((it, idx) => {
                 const l = level(it);
+                // Geändert: Jeder Nutzer der Gruppe darf editieren/löschen
                 const own = it.owner_id === user?.id || groupMembers.some(m => m.id === it.owner_id);
                 return (
                   <li key={it.id} className={`p-3 ${rowClass(l)} ${idx % 2 === 1 && l === 0 ? "bg-gray-50" : ""}`}>
