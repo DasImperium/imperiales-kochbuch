@@ -28,7 +28,7 @@ const schema = z.object({
   instructions: z.string().trim().max(8000).optional().or(z.literal("")),
 });
 
-interface Profile { id: string; display_name: string | null; email: string | null; }
+interface Profile { id: string; display_name: string | null; }
 
 export default function RecipeEditor() {
   const { id } = useParams<{ id?: string }>();
