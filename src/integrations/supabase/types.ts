@@ -663,6 +663,8 @@ export type Database = {
         }
       }
       find_user_id_by_email: { Args: { _email: string }; Returns: string }
+      get_group_join_code: { Args: { _group_id: string }; Returns: string }
+      get_my_email: { Args: never; Returns: string }
       group_member_ids: { Args: { _uid: string }; Returns: string[] }
       has_list_access: {
         Args: { _kind: string; _owner_id: string }
