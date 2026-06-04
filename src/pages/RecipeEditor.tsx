@@ -187,7 +187,7 @@ export default function RecipeEditor() {
                 <SelectContent>
                   {profiles.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {p.display_name || p.email || p.id.slice(0, 8)}
+                      {p.display_name || p.id.slice(0, 8)}
                     </SelectItem>
                   ))}
                 </SelectContent>
