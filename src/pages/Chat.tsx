@@ -25,7 +25,8 @@ export default function Chat() {
   const { user, isSuperadmin, isImperator } = useAuth();
   const canDelete = isSuperadmin || isImperator;
   
-  const currentUserId = user?.id || "local-dummy-user-id";
+  // Valid UUID v4 für den lokalen Fallback, damit Supabase/Lovable nicht wegen ungültiger Typen crasht
+  const currentUserId = user?.id || "00000000-0000-4000-a000-000000000000";
 
   const [contacts, setContacts] = useState<Profile[]>([]);
   const [active, setActive] = useState<ConvKey>("");
@@ -76,16 +77,20 @@ export default function Chat() {
       return;
     }
 
-    const { data } = await supabase.from("chat_messages")
-      .select("sender_id,recipient_id,content").eq("recipient_id", currentUserId).is("read_at", null);
-    
-    (data ?? []).forEach((m: any) => {
-      if (m.sender_id === currentUserId && m.content?.startsWith(HINT_PREFIX)) { hints++; return; }
-      if (m.sender_id === currentUserId && m.recipient_id === currentUserId) { return; }
-      map[`user:${m.sender_id}`] = (map[`user:${m.sender_id}`] ?? 0) + 1;
-    });
-    setUnreadByConv(map);
-    setHintUnread(hints);
+    try {
+      const { data } = await supabase.from("chat_messages")
+        .select("sender_id,recipient_id,content").eq("recipient_id", currentUserId).is("read_at", null);
+      
+      (data ?? []).forEach((m: any) => {
+        if (m.sender_id === currentUserId && m.content?.startsWith(HINT_PREFIX)) { hints++; return; }
+        if (m.sender_id === currentUserId && m.recipient_id === currentUserId) { return; }
+        map[`user:${m.sender_id}`] = (map[`user:${m.sender_id}`] ?? 0) + 1;
+      });
+      setUnreadByConv(map);
+      setHintUnread(hints);
+    } catch (e) {
+      console.log("Fehler beim Laden ungelesener Nachrichten (Offline-Modus)");
+    }
   };
   useEffect(() => { loadUnread(); }, [user, messages.length, localMessages.length]);
 
@@ -126,7 +131,7 @@ export default function Chat() {
         } else {
           const otherId = active.replace("user:", "");
           const res = await supabase.from("chat_messages").select("*")
-            .or(`and(sender_id.eq.${currentUserId},recipient_id.eq.${otherId}),and(sender_id.eq.${otherId},recipient_id.eq.${user.id})`)
+            .or(`and(sender_id.eq.${currentUserId},recipient_id.eq.${otherId}),and(sender_id.eq.${otherId},recipient_id.eq.${currentUserId})`)
             .order("created_at");
           data = ((res.data ?? []) as Msg[]).filter((m) => !isHint(m, currentUserId));
         }
@@ -169,13 +174,17 @@ export default function Chat() {
     setLocalMessages(prev => [...prev, newMsg]);
 
     if (user) {
-      const payloadBase = { sender_id: currentUserId, content: newMsg.content, image_url: image };
-      if (active === "broadcast") {
-        await supabase.from("chat_messages").insert({ ...payloadBase, recipient_id: null });
-      } else if (active === "self") {
-        await supabase.from("chat_messages").insert({ ...payloadBase, recipient_id: currentUserId, read_at: new Date().toISOString() });
-      } else {
-        await supabase.from("chat_messages").insert({ ...payloadBase, recipient_id: active.replace("user:", "") });
+      try {
+        const payloadBase = { sender_id: currentUserId, content: newMsg.content, image_url: image };
+        if (active === "broadcast") {
+          await supabase.from("chat_messages").insert({ ...payloadBase, recipient_id: null });
+        } else if (active === "self") {
+          await supabase.from("chat_messages").insert({ ...payloadBase, recipient_id: currentUserId, read_at: new Date().toISOString() });
+        } else {
+          await supabase.from("chat_messages").insert({ ...payloadBase, recipient_id: active.replace("user:", "") });
+        }
+      } catch (e) {
+        console.error("Senden an Supabase fehlgeschlagen", e);
       }
     }
 
@@ -206,15 +215,9 @@ export default function Chat() {
 
   const isHintsActive = active === "hinweise";
 
-  const scrollToTop = () => {
-    topRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-  
-  const scrollToBottom = () => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const scrollToTop = () => topRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = () => endRef.current?.scrollIntoView({ behavior: "smooth" });
 
-  // Ermittle den Namen des aktuell aktiven Chatpartners für die Headerzeile
   const activeChatName = useMemo(() => {
     if (active === "broadcast") return "An alle (Broadcast)";
     if (active === "self") return "An mich selbst (Notizen)";
@@ -243,9 +246,9 @@ export default function Chat() {
       {/* HAUPTLAYOUT */}
       <div className="flex flex-1 flex-col md:flex-row gap-4 overflow-hidden relative">
         
-        {/* KANÄLE / KONTAKTE (Werden ausgeblendet, sobald ein Chat aktiv ist) */}
+        {/* KANÄLE / KONTAKTE */}
         {!active && (
-          <Card className="imperial-surface border-gold/30 p-2 overflow-y-auto max-h-[40vh] md:max-h-none md:w-[240px] shrink-0 space-y-1 w-full animate-fade-in">
+          <Card className="imperial-surface border-gold/30 p-2 overflow-y-auto max-h-[40vh] md:max-h-none md:w-[240px] shrink-0 space-y-1 w-full">
             <button onClick={() => setActive("broadcast")}
               className={`w-full text-left px-3 py-2 rounded transition flex items-center gap-2 ${active === "broadcast" ? "bg-gold/20 text-gold" : "hover:bg-secondary/60 text-surface-foreground"}`}>
               <Megaphone className="w-4 h-4" /> An alle (Broadcast)
@@ -276,10 +279,9 @@ export default function Chat() {
           </Card>
         )}
 
-        {/* RECHTE SEITE: Verlauf (Nimmt vollen Platz ein, wenn active gesetzt ist) */}
+        {/* VERLAUF */}
         <Card className="bg-white border-gold/30 flex flex-1 flex-col overflow-hidden min-h-0 relative w-full">
           
-          {/* OBERE NAVI-LEISTE (Wird eingeblendet, wenn ein Chat läuft) */}
           {active && (
             <div className="flex items-center justify-between px-3 py-2 bg-zinc-100 border-b border-gray-200 shrink-0">
               <Button 
@@ -292,16 +294,15 @@ export default function Chat() {
                 <ArrowLeft className="w-3.5 h-3.5" /> Kontakte
               </Button>
               <span className="text-xs font-bold text-black truncate max-w-[60%]">{activeChatName}</span>
-              <div className="w-12" /> {/* Symmetrischer Spacer */}
+              <div className="w-12" />
             </div>
           )}
 
-          {/* NACHRICHTEN-LISTE */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ direction: "ltr" }}>
             <div ref={topRef} className="h-0 w-0" />
             {!active && (
               <p className="text-black/60 font-medium text-center py-8">
-                Wähle oben einen Kontakt oder Kanal aus, um den Chat zu starten.
+                Wähle einen Kontakt oder Kanal aus, um den Chat zu starten.
               </p>
             )}
             
@@ -348,21 +349,19 @@ export default function Chat() {
           {/* UTENSILIEN- UND EINGABEFELD */}
           <div className="p-3 bg-zinc-50 border-t border-gray-200 shrink-0">
             
-            {/* Medienzeile (Uploader links, Scroll-Buttons rechts daneben übereinander) */}
-            <div className="w-full flex items-end justify-between mb-2">
-              <div className="flex-1 max-h-[80px] overflow-hidden">
-                <ImageUploader bucket="chat-images" value={image} onChange={setImage} label="" />
+            <div className="flex items-center gap-2 w-full mb-2">
+              <div className="flex gap-2">
+                 <ImageUploader bucket="chat-images" value={image} onChange={setImage} label="Datei" />
+                 <ImageUploader bucket="chat-images" value={image} onChange={setImage} label="Kamera" />
               </div>
               
-              {/* SCROLL-BUTTONS (Rechts neben den Datei/Kamera-Uploadern übereinander platziert) */}
-              <div className="flex flex-col gap-1 shrink-0 ml-2">
+              <div className="flex flex-col gap-1 shrink-0 ml-auto">
                 <Button 
                   type="button" 
                   size="icon" 
                   variant="secondary" 
                   onClick={scrollToTop} 
-                  className="h-7 w-7 rounded bg-gray-200 hover:bg-gray-300 text-black shadow-sm flex items-center justify-center"
-                  title="Nach ganz oben springen"
+                  className="h-7 w-7 rounded bg-gray-200 text-black shadow-sm flex items-center justify-center"
                 >
                   <ArrowUp className="w-3.5 h-3.5" />
                 </Button>
@@ -371,24 +370,19 @@ export default function Chat() {
                   size="icon" 
                   variant="secondary" 
                   onClick={scrollToBottom} 
-                  className="h-7 w-7 rounded bg-gray-200 hover:bg-gray-300 text-black shadow-sm flex items-center justify-center"
-                  title="Nach ganz unten springen"
+                  className="h-7 w-7 rounded bg-gray-200 text-black shadow-sm flex items-center justify-center"
                 >
                   <ArrowDown className="w-3.5 h-3.5" />
                 </Button>
               </div>
             </div>
 
-            {/* Die Text-Eingabezeile */}
             <div className="flex items-center gap-2 w-full">
               <Input
                 value={text} 
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { sendOne(); } }}
-                placeholder={
-                  !active ? "Empfänger auswählen..." : 
-                  isHintsActive ? "Hinweise sind systemgeneriert" : "Nachricht…"
-                }
+                placeholder={!active ? "Empfänger auswählen..." : isHintsActive ? "Systemnachricht" : "Nachricht…"}
                 className="bg-white text-black flex-1 min-h-[42px] border-gray-300 placeholder:text-gray-400" 
                 maxLength={2000}
                 style={{ direction: "ltr" }}
