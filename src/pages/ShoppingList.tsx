@@ -22,11 +22,11 @@ export default function ShoppingList() {
 
   const load = async () => {
     if (!user) return;
-    const { data: me } = await supabase.from("profiles").select("group_name").eq("id", user.id).maybeSingle();
-    const gn = (me?.group_name ?? "").trim();
+    const { data: me } = await supabase.from("profiles").select("group_id").eq("id", user.id).maybeSingle();
+    const gid = (me as any)?.group_id as string | null;
     const ids = new Set<string>([user.id]);
-    if (gn) {
-      const { data: mates } = await supabase.from("profiles").select("id").ilike("group_name", gn);
+    if (gid) {
+      const { data: mates } = await supabase.from("profiles").select("id").eq("group_id", gid);
       (mates ?? []).forEach((m: any) => ids.add(m.id));
     }
     const { data: sharedTo } = await supabase.from("list_shares").select("owner_id").eq("shared_with", user.id).eq("list_kind", "shopping");
