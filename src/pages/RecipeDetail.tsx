@@ -195,7 +195,7 @@ export default function RecipeDetail() {
 <h1>${esc(recipe.title)}</h1>
 <div class="meta">Autor: ${esc(author)} · ${esc(categoryPath || "—")} · Zeit: ${esc(recipe.time_required)} · Für ${servings} ${esc(recipe.servings_unit)} · Bewertung: ${avg.toFixed(1)} ★</div>
 <div class="tags">${(recipe.tags ?? []).map((t) => `<span>#${esc(t)}</span>`).join("")}</div>
-${recipe.image_url ? `<img src="${recipe.image_url}" alt="">` : ""}
+${recipe.image_url && /^https?:\/\//i.test(recipe.image_url) ? `<img src="${esc(recipe.image_url)}" alt="">` : ""}
 ${recipe.description ? `<p>${esc(recipe.description)}</p>` : ""}
 <h2>Zutaten (für ${servings} ${esc(recipe.servings_unit)})</h2><pre>${esc(scaledIngredients)}</pre>
 <h2>Zubereitung</h2><pre>${esc(recipe.instructions || "")}</pre>
