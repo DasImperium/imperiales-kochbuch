@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Imperiales Kochbuch</string>
+    <string name="title_activity_main">Imperiales Kochbuch</string>
+    <string name="package_name">de.imperium.kochbuch</string>
+    <string name="custom_url_scheme">de.imperium.kochbuch</string>
+</resources>
