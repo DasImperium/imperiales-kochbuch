@@ -22,11 +22,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <intent-filter android:autoVerify="true">
+            <!-- Dieser Filter reagiert jetzt rein auf dein App-Protokoll -->
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="imperiales-kochbuch.lovable.app" />
+                <data android:scheme="de.imperium.kochbuch" />
             </intent-filter>
 
         </activity>

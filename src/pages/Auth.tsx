@@ -21,6 +21,12 @@ export default function Auth() {
   const location = useLocation();
   const [loading, setLoading] = useState(false);
 
+  // Ermittelt, ob die App als native Capacitor-App auf dem Smartphone läuft
+  const getRedirectUrl = () => {
+    const isCapacitor = window.origin.includes("localhost") || window.location.href.startsWith("file:");
+    return isCapacitor ? "de.imperium.kochbuch://login-callback" : window.location.origin;
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) navigate("/", { replace: true });
@@ -57,7 +63,7 @@ export default function Auth() {
         email,
         password,
         options: {
-          emailRedirectTo: window.location.origin,
+          emailRedirectTo: getRedirectUrl(),
           data: { display_name },
         },
       });
@@ -74,7 +80,7 @@ export default function Auth() {
   const handleGoogle = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: getRedirectUrl(),
     });
     if (result.error) {
       toast.error("Google-Anmeldung fehlgeschlagen");
