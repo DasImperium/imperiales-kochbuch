@@ -17,7 +17,6 @@ interface Profile { id: string; display_name: string | null; }
 type ConvKey = string; // "user:<id>" | "broadcast" | "hinweise" | "self"
 
 export const HINT_PREFIX = "[Hinweise] ";
-// Eine Nachricht ist ein Hinweis, wenn sie den Präfix hat ODER im Hinweise-Kanal läuft
 const isHint = (m: Msg) => m.content?.startsWith(HINT_PREFIX);
 const hintBody = (c: string) => c.replace(HINT_PREFIX, "");
 
@@ -66,12 +65,10 @@ export default function Chat() {
   // Ungelesene Nachrichten auswerten
   const loadUnread = async () => {
     if (!user) {
-      // Offline-Zähler-Berechnung basierend on localMessages
       const map: Record<string, number> = {};
       let hints = 0;
       localMessages.forEach(m => {
-        if (m.read_at) return; // Bereits gelesen? Ignorieren!
-        
+        if (m.read_at) return;
         if (isHint(m)) {
           hints++;
         } else if (m.sender_id !== currentUserId && m.recipient_id === currentUserId) {
@@ -110,7 +107,6 @@ export default function Chat() {
   const markAsRead = async (channelKey: ConvKey) => {
     const nowStr = new Date().toISOString();
 
-    // 1. Lokal als gelesen markieren
     setLocalMessages(prev => prev.map(m => {
       if (channelKey === "hinweise" && isHint(m)) return { ...m, read_at: nowStr };
       if (channelKey === "self" && m.sender_id === currentUserId && m.recipient_id === currentUserId && !isHint(m)) return { ...m, read_at: nowStr };
@@ -121,7 +117,6 @@ export default function Chat() {
       return m;
     }));
 
-    // 2. Auf dem Server als gelesen markieren
     if (!user) return;
     try {
       if (channelKey === "hinweise") {
@@ -139,7 +134,6 @@ export default function Chat() {
 
   useEffect(() => { loadUnread(); }, [user, messages, localMessages]);
 
-  // Sobald ein Chat geöffnet wird, setze ihn auf gelesen
   useEffect(() => {
     if (active) {
       markAsRead(active).then(() => loadUnread());
@@ -206,7 +200,7 @@ export default function Chat() {
 
   const sendOne = async () => {
     if (!active) return;
-    if (active === "hinweise") return; // Hinweise sind rein systemgeneriert
+    if (active === "hinweise") return;
     if (!text.trim()) return;
 
     const newMsg: Msg = {
@@ -247,11 +241,9 @@ export default function Chat() {
     }
   };
 
-  // Alle Hinweise für den aktuellen Nutzer löschen
   const clearAllHints = async () => {
     if (!confirm("Möchtest du wirklich alle deine Hinweise unwiderruflich löschen?")) return;
 
-    // Lokal filtern (entfernt alle Systemhinweise)
     setLocalMessages(prev => prev.filter(m => !isHint(m)));
     setMessages([]);
 
@@ -365,7 +357,6 @@ export default function Chat() {
               </Button>
               <span className="text-xs font-bold text-black truncate max-w-[40%]">{activeChatName}</span>
               
-              {/* Zeige den "Löschen" Button nur an, wenn der Hinweise-Kanal aktiv ist */}
               {isHintsActive ? (
                 <Button 
                   type="button" 
@@ -393,8 +384,8 @@ export default function Chat() {
               let senderLabel = hint ? "System" : mine ? "Ich" : (active === "self" ? "Notiz" : (contacts.find((c) => c.id === m.sender_id)?.display_name ?? "Unbekannt"));
 
               return (
-                <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"} group`}>
-                  <div className={`relative max-w-[80%] px-3 py-2 rounded-lg whitespace-pre-wrap text-sm border ${
+                <div key={m.id} className="flex group justify-start [&:has([data-mine=true])]:justify-end">
+                  <div data-mine={mine} className={`relative max-w-[80%] px-3 py-2 rounded-lg whitespace-pre-wrap text-sm border ${
                     hint ? "bg-[#FFF8DC] text-black border-[#B8860B]" : mine ? "bg-[#FFD700] text-black border-transparent" : "bg-gray-100 text-black border-gray-300"
                   }`}>
                     <div className="text-[11px] mb-0.5 opacity-80"><strong>{senderLabel}</strong></div>
@@ -412,14 +403,16 @@ export default function Chat() {
 
           {/* EINGABEFELD & CONTROLS */}
           <div className="p-3 bg-zinc-50 border-t border-gray-200 shrink-0">
-            <div className="flex items-center gap-2 w-full mb-2">
+            {/* KORREKTUR: flex-wrap hinzugefügt & justify-between für saubere Ausrichtung auf Mobile */}
+            <div className="flex flex-wrap items-center justify-between gap-2 w-full mb-2">
               
-              {/* Einziges, kombiniertes Uploadfeld */}
-              <div className="flex gap-2 shrink-0">
+              {/* ImageUploader bekommt auf Mobile flex-1, damit er nicht weggedrückt wird */}
+              <div className="flex gap-2 flex-1 min-w-[200px]">
                  <ImageUploader bucket="chat-images" value={image} onChange={setImage} label="Medien" />
               </div>
               
-              <div className="flex flex-col gap-1 shrink-0 ml-auto">
+              {/* Die Pfeile bleiben immer kompakt rechts bündig */}
+              <div className="flex gap-1 shrink-0 ml-auto">
                 <Button type="button" size="icon" variant="secondary" onClick={scrollToTop} className="h-7 w-7 rounded bg-gray-200 text-black shadow-sm"><ArrowUp className="w-3.5 h-3.5" /></Button>
                 <Button type="button" size="icon" variant="secondary" onClick={scrollToBottom} className="h-7 w-7 rounded bg-gray-200 text-black shadow-sm"><ArrowDown className="w-3.5 h-3.5" /></Button>
               </div>
