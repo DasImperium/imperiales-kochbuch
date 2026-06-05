@@ -34,8 +34,13 @@ export default function Profile() {
     const { data: me } = await supabase.from("profiles").select("group_id").eq("id", user.id).maybeSingle();
     const gid = (me as any)?.group_id as string | null;
     if (!gid) { setGroup(null); setGroupMembers([]); return; }
-    const { data: g } = await supabase.from("groups").select("*").eq("id", gid).maybeSingle();
-    setGroup((g as any) ?? null);
+    const { data: g } = await supabase.from("groups").select("id,name,owner_id").eq("id", gid).maybeSingle();
+    let joinCode = "";
+    if (g && (g as any).owner_id === user.id) {
+      const { data: code } = await supabase.rpc("get_group_join_code", { _group_id: gid });
+      joinCode = (code as string) ?? "";
+    }
+    setGroup(g ? ({ ...(g as any), join_code: joinCode } as Group) : null);
     const { data: mates } = await supabase.from("profiles").select("id,display_name").eq("group_id", gid);
     setGroupMembers((mates ?? []) as any);
   };
@@ -144,11 +149,15 @@ export default function Profile() {
           <div className="space-y-2">
             <p className="text-sm"><strong>{group.name}</strong></p>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs">Beitrittscode:</span>
-              <code className="bg-background/60 px-2 py-1 rounded font-mono text-sm">{group.join_code}</code>
-              <Button size="sm" variant="outline" onClick={copyCode}><Copy className="w-3 h-3 mr-1" />Kopieren</Button>
-              {group.owner_id === user?.id && (
-                <Button size="sm" variant="outline" onClick={regenCode}><RefreshCw className="w-3 h-3 mr-1" />Code erneuern</Button>
+              {group.owner_id === user?.id ? (
+                <>
+                  <span className="text-xs">Beitrittscode:</span>
+                  <code className="bg-background/60 px-2 py-1 rounded font-mono text-sm">{group.join_code}</code>
+                  <Button size="sm" variant="outline" onClick={copyCode}><Copy className="w-3 h-3 mr-1" />Kopieren</Button>
+                  <Button size="sm" variant="outline" onClick={regenCode}><RefreshCw className="w-3 h-3 mr-1" />Code erneuern</Button>
+                </>
+              ) : (
+                <span className="text-xs text-surface-foreground/60">Nur der Eigentümer kann den Beitrittscode einsehen.</span>
               )}
               <Button size="sm" variant="destructive" onClick={leaveGroup}><LogOut className="w-3 h-3 mr-1" />Verlassen</Button>
             </div>
