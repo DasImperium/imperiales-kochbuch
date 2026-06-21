@@ -125,11 +125,19 @@ export default function ShoppingList() {
     if (!confirm(`${checked.length} abgehakte Artikel ins Inventar verschieben?`)) return;
     const { data: inv } = await supabase.from("inventory_items").select("*").eq("owner_id", user.id);
     for (const it of checked) {
-      const existing = (inv ?? []).find((x: any) => x.name.toLowerCase() === it.name.toLowerCase());
-      if (existing) {
-        const sum = sumSameUnit({ amount: Number(existing.amount), unit: existing.unit }, { amount: Number(it.amount), unit: it.unit });
-        if (sum) await supabase.from("inventory_items").update({ amount: sum.amount, unit: sum.unit }).eq("id", existing.id);
-        else await supabase.from("inventory_items").update({ amount: Number(existing.amount) + Number(it.amount) }).eq("id", existing.id);
+      // Alle existierenden Inventar-Zeilen mit identischem Namen (case-insensitive) sammeln
+      const matches = (inv ?? []).filter((x: any) => x.name.toLowerCase().trim() === it.name.toLowerCase().trim());
+      if (matches.length > 0) {
+        // Summe aller Treffer + neue Menge bilden
+        let total: { amount: number; unit: string } = { amount: Number(it.amount), unit: it.unit };
+        for (const m of matches) {
+          const s = sumSameUnit(total, { amount: Number(m.amount), unit: m.unit });
+          total = s ?? { amount: total.amount + Number(m.amount), unit: total.unit };
+        }
+        // Erste Zeile aktualisieren, übrige Duplikate entfernen
+        const [keep, ...dupes] = matches;
+        await supabase.from("inventory_items").update({ amount: total.amount, unit: total.unit }).eq("id", keep.id);
+        if (dupes.length) await supabase.from("inventory_items").delete().in("id", dupes.map((d: any) => d.id));
       } else {
         await supabase.from("inventory_items").insert({ owner_id: user.id, name: it.name, amount: it.amount, unit: it.unit });
       }
