@@ -69,7 +69,41 @@ export default function Inventory() {
     (sharedTo ?? []).forEach((s: any) => ownerIds.add(s.owner_id));
 
     const { data } = await supabase.from("inventory_items").select("*").in("owner_id", Array.from(ownerIds)).order("created_at", { ascending: true });
-    const list = (data ?? []) as Item[];
+    let list = (data ?? []) as Item[];
+
+    // Konsolidierung: gleiche Zutat (case-insensitive) im eigenen Bestand zu einer Zeile zusammenfassen
+    const ownItems = list.filter((x) => x.owner_id === user.id);
+    const dupGroups = new Map<string, Item[]>();
+    for (const it of ownItems) {
+      const key = it.name.toLowerCase().trim();
+      const arr = dupGroups.get(key) ?? [];
+      arr.push(it);
+      dupGroups.set(key, arr);
+    }
+    const { sumSameUnit } = await import("@/lib/units");
+    let didMerge = false;
+    for (const arr of dupGroups.values()) {
+      if (arr.length < 2) continue;
+      didMerge = true;
+      let total: { amount: number; unit: string } = { amount: Number(arr[0].amount), unit: arr[0].unit };
+      let maxSafety = Number(arr[0].safety_stock || 0);
+      let maxMin = Number(arr[0].min_stock || 0);
+      for (let i = 1; i < arr.length; i++) {
+        const s = sumSameUnit(total, { amount: Number(arr[i].amount), unit: arr[i].unit });
+        total = s ?? { amount: total.amount + Number(arr[i].amount), unit: total.unit };
+        maxSafety = Math.max(maxSafety, Number(arr[i].safety_stock || 0));
+        maxMin = Math.max(maxMin, Number(arr[i].min_stock || 0));
+      }
+      const [keep, ...dupes] = arr;
+      await supabase.from("inventory_items")
+        .update({ amount: total.amount, unit: total.unit, safety_stock: maxSafety, min_stock: maxMin })
+        .eq("id", keep.id);
+      if (dupes.length) await supabase.from("inventory_items").delete().in("id", dupes.map((d) => d.id));
+    }
+    if (didMerge) {
+      const { data: reload } = await supabase.from("inventory_items").select("*").in("owner_id", Array.from(ownerIds)).order("created_at", { ascending: true });
+      list = (reload ?? []) as Item[];
+    }
     setItems(list);
 
     const { data: sh } = await supabase.from("list_shares").select("*").eq("owner_id", user.id).eq("list_kind", "inventory");
